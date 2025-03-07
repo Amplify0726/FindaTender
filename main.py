@@ -9,7 +9,18 @@ SERVICE_ACCOUNT_FILE = "find-a-tender-script-75ef0d877e25.json"  # Replace with 
 SPREADSHEET_NAME = "Find a Tender Data"  # Replace with your actual sheet name
 
 # Authenticate with Google Sheets
-gc = gspread.service_account(filename=SERVICE_ACCOUNT_FILE)
+import os
+from google.auth import credentials
+from google.oauth2 import service_account
+import json
+
+# Load the credentials from the environment variable
+service_account_info = json.loads(os.getenv('GOOGLE_SHEETS_CREDENTIALS'))
+
+# Use the credentials
+credentials = service_account.Credentials.from_service_account_info(service_account_info)
+gc = gspread.authorize(credentials)
+
 sh = gc.open(SPREADSHEET_NAME)
 
 # Load OCIDs from the "OCIDs" sheet
