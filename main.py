@@ -4,13 +4,20 @@ import requests
 import json
 from urllib.parse import quote_plus
 import os
+from google.auth import credentials
 from google.oauth2 import service_account
 
 # Load the credentials from the environment variable
 service_account_info = json.loads(os.getenv('GOOGLE_SHEETS_CREDENTIALS'))
 
-# Use the credentials
-credentials = service_account.Credentials.from_service_account_info(service_account_info)
+# Define the scopes required
+scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+
+# Use the credentials with scopes
+credentials = service_account.Credentials.from_service_account_info(
+    service_account_info, scopes=scopes
+)
+
 gc = gspread.authorize(credentials)
 
 # Spreadsheet and OCID details
