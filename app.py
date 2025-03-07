@@ -1,37 +1,143 @@
+import os
+import json
+from google.oauth2 import service_account
+import gspread
+import pandas as pd
+import requests
+from urllib.parse import quote_plus
 from flask import Flask, jsonify
 import schedule
 import time
 import threading
 
+# Initialize Flask app
 app = Flask(__name__)
 
-# Basic route to ensure no 404 error at the root
-@app.route('/')
-def home():
-    return "Welcome to the Find a Tender job service!"
+# Load Google Sheets credentials from the environment variable
+service_account_info = json.loads(os.getenv('GOOGLE_SHEETS_CREDENTIALS'))
 
-# The job that runs your existing task
-def run_job():
-    # Your existing code here to extract data from Find a Tender and write to Google Sheets
-    print("Job is running...")  # Replace this line with your existing job code
+# Define the required scopes
+scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive.readonly"]
 
-# Define a route to manually trigger the job
-@app.route('/run_job', methods=['POST'])
-def manual_trigger():
-    run_job()
-    return jsonify({"message": "Job triggered manually!"}), 200
+# Use the credentials and scopes
+credentials = service_account.Credentials.from_service_account_info(
+    service_account_info, scopes=scopes
+)
 
-# Set up the scheduler for automatic execution
-def run_scheduled_jobs():
-    # You can change the interval to any frequency you want (e.g., every 24 hours)
-    schedule.every(24).hours.do(run_job)
+# Authorize the client
+gc = gspread.authorize(credentials)
 
+# Define your spreadsheet name
+SPREADSHEET_NAME = "Find a Tender Data"
+
+# Open the Google Sheets spreadsheet
+sh = gc.open(SPREADSHEET_NAME)
+
+# Load OCIDs from the "OCIDs" sheet
+ocid_sheet = sh.worksheet("OCIDs")
+ocid_list = ocid_sheet.col_values(1)  # Reads all OCIDs from column A
+ocid_list = [ocid for ocid in ocid_list if ocid.strip()]  # Remove empty values
+
+# Define API URL
+API_BASE_URL = "https://www.find-tender.service.gov.uk/api/1.0/ocdsReleasePackages/"
+
+# Store results
+results = []
+
+def fetch_data_and_update():
+    global results
+    results.clear()  # Clear results before fetching new data
+    
+    for ocid in ocid_list:
+        # Ensure OCID is URL-encoded
+        encoded_ocid = quote_plus(ocid.strip())
+        response = requests.get(API_BASE_URL + encoded_ocid)
+        
+        if response.status_code == 200:
+            data = response.json()
+            try:
+                release = data["releases"][0]  # Assuming we are always working with the first release
+                
+                tender_info = {
+                    "OCID": release.get("ocid", "N/A"),
+                    "ID": release.get("id", "N/A"),
+                    "Tender ID": release.get("tender", {}).get("id", "N/A"),
+                    "Tender Title": release.get("tender", {}).get("title", "N/A"),
+                    "Tender Description": release.get("tender", {}).get("description", "N/A"),
+                    "Tender Status": release.get("tender", {}).get("status", "N/A"),
+                    "Tender Value Amount": release.get("tender", {}).get("value", {}).get("amount", "N/A"),
+                    "Tender Value Currency": release.get("tender", {}).get("value", {}).get("currency", "N/A"),
+                    "Procurement Method": release.get("tender", {}).get("procurementMethod", "N/A"),
+                    "Procurement Method Details": release.get("tender", {}).get("procurementMethodDetails", "N/A"),
+                    "Main Procurement Category": release.get("tender", {}).get("mainProcurementCategory", "N/A"),
+                    "Tender Period End Date": release.get("tender", {}).get("tenderPeriod", {}).get("endDate", "N/A"),
+                    "Tender Period Start Date": release.get("tender", {}).get("tenderPeriod", {}).get("startDate", "N/A"),
+                    "Enquiry Period End Date": release.get("tender", {}).get("enquiryPeriod", {}).get("endDate", "N/A"),
+                    "Tender Submission Method": release.get("tender", {}).get("submissionMethodDetails", "N/A"),
+                    "Tender Submission Terms": release.get("tender", {}).get("submissionTerms", {}).get("electronicSubmissionPolicy", "N/A"),
+                    "Tender Award Criteria": release.get("tender", {}).get("lots", [{}])[0].get("awardCriteria", {}).get("description", "N/A"),
+                    "Tender Lot Value Amount": release.get("tender", {}).get("lots", [{}])[0].get("value", {}).get("amount", "N/A"),
+                    "Tender Lot Value Currency": release.get("tender", {}).get("lots", [{}])[0].get("value", {}).get("currency", "N/A"),
+                    "Tender Lot Contract Period Start Date": release.get("tender", {}).get("lots", [{}])[0].get("contractPeriod", {}).get("startDate", "N/A"),
+                    "Tender Lot Contract Period End Date": release.get("tender", {}).get("lots", [{}])[0].get("contractPeriod", {}).get("endDate", "N/A"),
+                    "Tender Lot Suitability SME": release.get("tender", {}).get("lots", [{}])[0].get("suitability", {}).get("sme", "N/A"),
+                    "Buyer Name": release.get("buyer", {}).get("name", "N/A"),
+                    "Buyer ID": release.get("buyer", {}).get("id", "N/A"),
+                    "Publisher Name": release.get("publisher", {}).get("name", "N/A"),
+                    "Publisher UID": release.get("publisher", {}).get("uid", "N/A"),
+                    "Publisher Scheme": release.get("publisher", {}).get("scheme", "N/A"),
+                    "Publisher URI": release.get("publisher", {}).get("uri", "N/A"),
+                    "License": release.get("license", "N/A"),
+                    "Publication Policy": release.get("publicationPolicy", "N/A"),
+                    "Release Date": release.get("date", "N/A"),
+                    "Release Tags": ", ".join(release.get("tag", [])),
+                    "Release Published Date": release.get("publishedDate", "N/A"),
+                    "Release URI": release.get("uri", "N/A"),
+                    "Extensions": ", ".join(release.get("extensions", [])),
+                    "Documents": ", ".join([doc.get("url", "N/A") for doc in release.get("documents", [])]),
+                }
+                results.append(tender_info)
+            except (KeyError, IndexError) as e:
+                print(f"Error extracting data for OCID: {ocid} - {e}")
+        elif response.status_code == 404:
+            print(f"OCID {ocid} not found. Skipping...")
+        else:
+            print(f"Error fetching OCID {ocid}, Status Code: {response.status_code}")
+
+    # Write data back to Google Sheets
+    results_sheet = sh.worksheet("Results")
+
+    # Convert results to a DataFrame
+    df = pd.DataFrame(results)
+
+    # Clear existing data and update the sheet
+    results_sheet.clear()
+    results_sheet.update([df.columns.values.tolist()] + df.values.tolist())
+
+    print("Data successfully written to Google Sheets!")
+
+# The function that will run on schedule
+def run_scheduled_job():
+    schedule.every().day.at("09:00").do(fetch_data_and_update)  # Adjust the time as needed
     while True:
         schedule.run_pending()
         time.sleep(1)
 
-# Start the scheduled job in a separate thread so it runs in the background
-threading.Thread(target=run_scheduled_jobs, daemon=True).start()
+# Start the scheduled job in a separate thread
+def start_scheduled_jobs():
+    schedule_thread = threading.Thread(target=run_scheduled_job)
+    schedule_thread.daemon = True
+    schedule_thread.start()
+
+# Flask route to manually trigger the job
+@app.route('/run_job', methods=['GET'])
+def manual_trigger():
+    fetch_data_and_update()
+    return jsonify({"status": "success", "message": "Job manually triggered!"})
 
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=5000)
+    # Start scheduled jobs in the background
+    start_scheduled_jobs()
+    
+    # Run the Flask app
+    app.run(host='0.0.0.0', port=5000)  # You can change the port if necessary
