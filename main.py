@@ -3,16 +3,8 @@ import pandas as pd
 import requests
 import json
 from urllib.parse import quote_plus
-
-# Load Google Sheets credentials
-SERVICE_ACCOUNT_FILE = "find-a-tender-script-75ef0d877e25.json"  # Replace with your JSON filename
-SPREADSHEET_NAME = "Find a Tender Data"  # Replace with your actual sheet name
-
-# Authenticate with Google Sheets
 import os
-from google.auth import credentials
 from google.oauth2 import service_account
-import json
 
 # Load the credentials from the environment variable
 service_account_info = json.loads(os.getenv('GOOGLE_SHEETS_CREDENTIALS'))
@@ -21,6 +13,11 @@ service_account_info = json.loads(os.getenv('GOOGLE_SHEETS_CREDENTIALS'))
 credentials = service_account.Credentials.from_service_account_info(service_account_info)
 gc = gspread.authorize(credentials)
 
+# Spreadsheet and OCID details
+SPREADSHEET_NAME = "Find a Tender Data"  # Replace with your actual sheet name
+SERVICE_ACCOUNT_FILE = "find-a-tender-script-75ef0d877e25.json"  # Keep this as is
+
+# Authenticate with Google Sheets
 sh = gc.open(SPREADSHEET_NAME)
 
 # Load OCIDs from the "OCIDs" sheet
@@ -53,51 +50,4 @@ for ocid in ocid_list:
                 "Tender Status": release.get("tender", {}).get("status", "N/A"),
                 "Tender Value Amount": release.get("tender", {}).get("value", {}).get("amount", "N/A"),
                 "Tender Value Currency": release.get("tender", {}).get("value", {}).get("currency", "N/A"),
-                "Procurement Method": release.get("tender", {}).get("procurementMethod", "N/A"),
-                "Procurement Method Details": release.get("tender", {}).get("procurementMethodDetails", "N/A"),
-                "Main Procurement Category": release.get("tender", {}).get("mainProcurementCategory", "N/A"),
-                "Tender Period End Date": release.get("tender", {}).get("tenderPeriod", {}).get("endDate", "N/A"),
-                "Tender Period Start Date": release.get("tender", {}).get("tenderPeriod", {}).get("startDate", "N/A"),
-                "Enquiry Period End Date": release.get("tender", {}).get("enquiryPeriod", {}).get("endDate", "N/A"),
-                "Tender Submission Method": release.get("tender", {}).get("submissionMethodDetails", "N/A"),
-                "Tender Submission Terms": release.get("tender", {}).get("submissionTerms", {}).get("electronicSubmissionPolicy", "N/A"),
-                "Tender Award Criteria": release.get("tender", {}).get("lots", [{}])[0].get("awardCriteria", {}).get("description", "N/A"),
-                "Tender Lot Value Amount": release.get("tender", {}).get("lots", [{}])[0].get("value", {}).get("amount", "N/A"),
-                "Tender Lot Value Currency": release.get("tender", {}).get("lots", [{}])[0].get("value", {}).get("currency", "N/A"),
-                "Tender Lot Contract Period Start Date": release.get("tender", {}).get("lots", [{}])[0].get("contractPeriod", {}).get("startDate", "N/A"),
-                "Tender Lot Contract Period End Date": release.get("tender", {}).get("lots", [{}])[0].get("contractPeriod", {}).get("endDate", "N/A"),
-                "Tender Lot Suitability SME": release.get("tender", {}).get("lots", [{}])[0].get("suitability", {}).get("sme", "N/A"),
-                "Buyer Name": release.get("buyer", {}).get("name", "N/A"),
-                "Buyer ID": release.get("buyer", {}).get("id", "N/A"),
-                "Publisher Name": release.get("publisher", {}).get("name", "N/A"),
-                "Publisher UID": release.get("publisher", {}).get("uid", "N/A"),
-                "Publisher Scheme": release.get("publisher", {}).get("scheme", "N/A"),
-                "Publisher URI": release.get("publisher", {}).get("uri", "N/A"),
-                "License": release.get("license", "N/A"),
-                "Publication Policy": release.get("publicationPolicy", "N/A"),
-                "Release Date": release.get("date", "N/A"),
-                "Release Tags": ", ".join(release.get("tag", [])),
-                "Release Published Date": release.get("publishedDate", "N/A"),
-                "Release URI": release.get("uri", "N/A"),
-                "Extensions": ", ".join(release.get("extensions", [])),
-                "Documents": ", ".join([doc.get("url", "N/A") for doc in release.get("documents", [])]),
-            }
-            results.append(tender_info)
-        except (KeyError, IndexError) as e:
-            print(f"Error extracting data for OCID: {ocid} - {e}")
-    elif response.status_code == 404:
-        print(f"OCID {ocid} not found. Skipping...")
-    else:
-        print(f"Error fetching OCID {ocid}, Status Code: {response.status_code}")
-
-# Write data back to Google Sheets
-results_sheet = sh.worksheet("Results")
-
-# Convert results to a DataFrame
-df = pd.DataFrame(results)
-
-# Clear existing data and update the sheet
-results_sheet.clear()
-results_sheet.update([df.columns.values.tolist()] + df.values.tolist())
-
-print("Data successfully written to Google Sheets!")
+                "Procurement Method": release.get("tender", {}).get("procurementMethod", "
