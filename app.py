@@ -54,7 +54,45 @@ for ocid in ocid_list:
     if response.status_code == 200:
         data = response.json()
         try:
+            # Extract root-level data first
+            publisher = data.get("publisher", {})
+            license_info = data.get("license", "N/A")
+            publication_policy = data.get("publicationPolicy", "N/A")
+            published_date = data.get("publishedDate", "N/A")
+            uri = data.get("uri", "N/A")
+            extensions = data.get("extensions", [])
+            
             release = data["releases"][0]  # Assuming we are always working with the first release
+            
+            # Extract document information
+            documents = release.get("tender", {}).get("documents", [])
+            document_types = [doc.get("documentType", "N/A") for doc in documents]
+            document_descriptions = [doc.get("description", "N/A") for doc in documents]
+            document_urls = [doc.get("url", "N/A") for doc in documents]
+            document_formats = [doc.get("format", "N/A") for doc in documents]
+            
+            # Extract buyer information
+            buyer_id = release.get("buyer", {}).get("id", "N/A")
+            buyer_party = next((party for party in release.get("parties", []) 
+                               if party.get("id") == buyer_id), {})
+            
+            buyer_contact_point = buyer_party.get("contactPoint", {})
+            buyer_contact_name = buyer_contact_point.get("name", "N/A")
+            buyer_contact_email = buyer_contact_point.get("email", "N/A")
+            
+            # Extract legal basis information
+            legal_basis = release.get("tender", {}).get("legalBasis", {})
+            legal_basis_id = legal_basis.get("id", "N/A")
+            legal_basis_scheme = legal_basis.get("scheme", "N/A")
+            legal_basis_uri = legal_basis.get("uri", "N/A")
+            
+            # Extract item information
+            items = release.get("tender", {}).get("items", [])
+            item_ids = [item.get("id", "N/A") for item in items]
+            item_classifications = [
+                f"{item.get('additionalClassifications', [{}])[0].get('id', 'N/A')} - {item.get('additionalClassifications', [{}])[0].get('description', 'N/A')}"
+                for item in items if item.get('additionalClassifications')
+            ]
             
             tender_info = {
                 # Existing fields
@@ -126,7 +164,7 @@ for ocid in ocid_list:
                 # Additional tender information
                 "Tender Above Threshold": release.get("tender", {}).get("aboveThreshold", "N/A"),
                 
-                # Other requirements
+                # Reserved participation location identifiers
                 "Reserved Participation Location Identifiers": ", ".join(
                     [identifier for identifier in release.get("tender", {})
                     .get("otherRequirements", {})
