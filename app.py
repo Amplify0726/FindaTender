@@ -88,11 +88,11 @@ for ocid in ocid_list:
                 "License": release.get("license", "N/A"),
                 "Publication Policy": release.get("publicationPolicy", "N/A"),
                 "Release Date": release.get("date", "N/A"),
-                "Release Tags": ", ".join(release.get("tag", [])),
+                "Release Tags": ", ".join(release.get("tag", [])) if release.get("tag") else "N/A",
                 "Release Published Date": release.get("publishedDate", "N/A"),
                 "Release URI": release.get("uri", "N/A"),
-                "Extensions": ", ".join(release.get("extensions", [])),
-                "Documents": ", ".join([doc.get("url", "N/A") for doc in release.get("documents", [])]),
+                "Extensions": ", ".join(release.get("extensions", [])) if release.get("extensions") else "N/A",
+                "Documents": ", ".join([doc.get("url", "N/A") for doc in release.get("documents", [])]) if release.get("documents") else "N/A",
             }
             results.append(tender_info)
         except (KeyError, IndexError) as e:
@@ -107,6 +107,25 @@ results_sheet = sh.worksheet("Results")
 
 # Convert results to a DataFrame
 df = pd.DataFrame(results)
+
+# Clean data - replace None, empty lists, and other problematic values
+def clean_value(val):
+    if val is None:
+        return ""
+    if isinstance(val, (list, dict)):
+        if not val:  # Empty list or dict
+            return ""
+        return str(val)
+    return val
+
+# Apply cleaning to all DataFrame cells
+for col in df.columns:
+    df[col] = df[col].apply(clean_value)
+
+# For debugging (optional)
+if len(df) >= 4 and len(df.columns) >= 22:
+    print(f"Value at [4][22]: {df.iloc[3, 21]}")
+    print(f"Type: {type(df.iloc[3, 21])}")
 
 # Clear existing data and update the sheet
 results_sheet.clear()
