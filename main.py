@@ -1,30 +1,29 @@
+import os
+import json
+from google.oauth2 import service_account
 import gspread
 import pandas as pd
 import requests
-import json
 from urllib.parse import quote_plus
-import os
-from google.auth import credentials
-from google.oauth2 import service_account
 
-# Load the credentials from the environment variable
+# Load Google Sheets credentials from the environment variable
 service_account_info = json.loads(os.getenv('GOOGLE_SHEETS_CREDENTIALS'))
 
-# Define the scopes required
-scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+# Define the required scopes
+scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive.readonly"]
 
-# Use the credentials with scopes
+# Use the credentials and scopes
 credentials = service_account.Credentials.from_service_account_info(
     service_account_info, scopes=scopes
 )
 
+# Authorize the client
 gc = gspread.authorize(credentials)
 
-# Spreadsheet and OCID details
-SPREADSHEET_NAME = "Find a Tender Data"  # Replace with your actual sheet name
-SERVICE_ACCOUNT_FILE = "find-a-tender-script-75ef0d877e25.json"  # Keep this as is
+# Define your spreadsheet name
+SPREADSHEET_NAME = "Find a Tender Data"
 
-# Authenticate with Google Sheets
+# Open the Google Sheets spreadsheet
 sh = gc.open(SPREADSHEET_NAME)
 
 # Load OCIDs from the "OCIDs" sheet
