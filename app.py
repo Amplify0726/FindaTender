@@ -57,6 +57,7 @@ for ocid in ocid_list:
             release = data["releases"][0]  # Assuming we are always working with the first release
             
             tender_info = {
+                # Existing fields
                 "OCID": release.get("ocid", "N/A"),
                 "ID": release.get("id", "N/A"),
                 "Tender ID": release.get("tender", {}).get("id", "N/A"),
@@ -81,18 +82,81 @@ for ocid in ocid_list:
                 "Tender Lot Suitability SME": release.get("tender", {}).get("lots", [{}])[0].get("suitability", {}).get("sme", "N/A"),
                 "Buyer Name": release.get("buyer", {}).get("name", "N/A"),
                 "Buyer ID": release.get("buyer", {}).get("id", "N/A"),
-                "Publisher Name": release.get("publisher", {}).get("name", "N/A"),
-                "Publisher UID": release.get("publisher", {}).get("uid", "N/A"),
-                "Publisher Scheme": release.get("publisher", {}).get("scheme", "N/A"),
-                "Publisher URI": release.get("publisher", {}).get("uri", "N/A"),
-                "License": release.get("license", "N/A"),
-                "Publication Policy": release.get("publicationPolicy", "N/A"),
+                
+                # Fixed publisher fields - now from root level
+                "Publisher Name": publisher.get("name", "N/A"),
+                "Publisher UID": publisher.get("uid", "N/A"),
+                "Publisher Scheme": publisher.get("scheme", "N/A"),
+                "Publisher URI": publisher.get("uri", "N/A"),
+                "License": license_info,
+                "Publication Policy": publication_policy,
+                
+                # Fixed release fields
                 "Release Date": release.get("date", "N/A"),
-                "Release Tags": ", ".join(release.get("tag", [])) if release.get("tag") else "N/A",
-                "Release Published Date": release.get("publishedDate", "N/A"),
-                "Release URI": release.get("uri", "N/A"),
-                "Extensions": ", ".join(release.get("extensions", [])) if release.get("extensions") else "N/A",
-                "Documents": ", ".join([doc.get("url", "N/A") for doc in release.get("documents", [])]) if release.get("documents") else "N/A",
+                "Release Tags": ", ".join(release.get("tag", [])),
+                "Release Published Date": published_date,  # Now from root level
+                "Release URI": uri,  # Now from root level
+                "Extensions": ", ".join(extensions),  # Now from root level
+                "Documents": ", ".join(document_urls) if document_urls else "N/A",
+                
+                # New fields
+                "Initiation Type": release.get("initiationType", "N/A"),
+                
+                # Buyer detailed information
+                "Buyer Address Street": buyer_party.get("address", {}).get("streetAddress", "N/A"),
+                "Buyer Address Locality": buyer_party.get("address", {}).get("locality", "N/A"),
+                "Buyer Address Postal Code": buyer_party.get("address", {}).get("postalCode", "N/A"),
+                "Buyer Address Country": buyer_party.get("address", {}).get("country", "N/A"),
+                "Buyer Address Country Name": buyer_party.get("address", {}).get("countryName", "N/A"),
+                "Buyer Address Region": buyer_party.get("address", {}).get("region", "N/A"),
+                "Buyer Contact Name": buyer_contact_name,
+                "Buyer Contact Email": buyer_contact_email,
+                "Buyer Roles": ", ".join(buyer_party.get("roles", [])),
+                
+                # Buyer classifications
+                "Buyer Classification Scheme": next((c.get("scheme", "N/A") for c in buyer_party.get("details", {}).get("classifications", [])), "N/A"),
+                "Buyer Classification ID": next((c.get("id", "N/A") for c in buyer_party.get("details", {}).get("classifications", [])), "N/A"),
+                "Buyer Classification Description": next((c.get("description", "N/A") for c in buyer_party.get("details", {}).get("classifications", [])), "N/A"),
+                
+                # Legal basis
+                "Legal Basis ID": legal_basis_id,
+                "Legal Basis Scheme": legal_basis_scheme,
+                "Legal Basis URI": legal_basis_uri,
+                
+                # Additional tender information
+                "Tender Above Threshold": release.get("tender", {}).get("aboveThreshold", "N/A"),
+                
+                # Other requirements
+                "Reserved Participation Location Identifiers": ", ".join(
+                    [identifier for identifier in release.get("tender", {})
+                    .get("otherRequirements", {})
+                    .get("reservedParticipationLocation", {})
+                    .get("gazetteer", {})
+                    .get("identifiers", [])]),
+                
+                # Document details (first 3 documents)
+                "Document 1 Type": document_types[0] if len(document_types) > 0 else "N/A",
+                "Document 1 Description": document_descriptions[0] if len(document_descriptions) > 0 else "N/A",
+                "Document 1 URL": document_urls[0] if len(document_urls) > 0 else "N/A",
+                "Document 1 Format": document_formats[0] if len(document_formats) > 0 else "N/A",
+                
+                "Document 2 Type": document_types[1] if len(document_types) > 1 else "N/A",
+                "Document 2 Description": document_descriptions[1] if len(document_descriptions) > 1 else "N/A",
+                "Document 2 URL": document_urls[1] if len(document_urls) > 1 else "N/A",
+                "Document 2 Format": document_formats[1] if len(document_formats) > 1 else "N/A",
+                
+                "Document 3 Type": document_types[2] if len(document_types) > 2 else "N/A",
+                "Document 3 Description": document_descriptions[2] if len(document_descriptions) > 2 else "N/A",
+                "Document 3 URL": document_urls[2] if len(document_urls) > 2 else "N/A",
+                "Document 3 Format": document_formats[2] if len(document_formats) > 2 else "N/A",
+                
+                # Item information
+                "Item IDs": ", ".join(item_ids),
+                "Item Classifications": ", ".join(item_classifications),
+                
+                # Gross value amounts (if available)
+                "Tender Value Amount Gross": release.get("tender", {}).get("value", {}).get("amountGross", "N/A"),
+                "Tender Lot Value Amount Gross": release.get("tender", {}).get("lots", [{}])[0].get("value", {}).get("amountGross", "N/A"),
             }
             results.append(tender_info)
         except (KeyError, IndexError) as e:
