@@ -5,10 +5,15 @@ import threading
 
 app = Flask(__name__)
 
+# Basic route to ensure no 404 error at the root
+@app.route('/')
+def home():
+    return "Welcome to the Find a Tender job service!"
+
 # The job that runs your existing task
 def run_job():
     # Your existing code here to extract data from Find a Tender and write to Google Sheets
-    print("Job is running...")  # You can replace this with your actual task
+    print("Job is running...")  # Replace this line with your existing job code
 
 # Define a route to manually trigger the job
 @app.route('/run_job', methods=['POST'])
