@@ -352,7 +352,15 @@ class UK3Notice(BaseNotice):
 @dataclass
 class UK4Notice:
     """Class for handling UK4 tender notices"""
-    # Required fields first (no defaults)
+    # First the fields from BaseNotice with no defaults
+    ocid: str  
+    id: str    
+    date: str  
+    tender: Dict[str, Any]
+    parties: List[Dict[str, Any]]
+    buyer: Dict[str, str]
+
+    # Then UK4-specific required fields (no defaults)
     notice_identifier: str
     procurement_identifier: str
     tender_title: str
@@ -370,15 +378,7 @@ class UK4Notice:
     buyer_name: str
     buyer_id: str
     
-    # Base notice fields with required values
-    ocid: str  
-    id: str    
-    date: str  
-    tender: Dict[str, Any]
-    parties: List[Dict[str, Any]]
-    buyer: Dict[str, str]
-    
-    # Optional fields with defaults last
+    # Finally all optional fields with defaults
     language: str = "en"
     published_date: Optional[str] = None
     last_edited_date: Optional[str] = None
@@ -406,7 +406,15 @@ class UK4Notice:
                 })
         
         return cls(
-            # Required fields first
+            # BaseNotice required fields first
+            ocid=data.get('ocid'),
+            id=data.get('id'),
+            date=data.get('date'),
+            tender=tender,
+            parties=data.get('parties', []),
+            buyer=data.get('buyer', {}),
+            
+            # UK4-specific required fields
             notice_identifier=data.get('id'),
             procurement_identifier=data.get('ocid'),
             tender_title=tender.get('title'),
@@ -424,15 +432,7 @@ class UK4Notice:
             buyer_name=data.get('buyer', {}).get('name'),
             buyer_id=data.get('buyer', {}).get('id'),
             
-            # Required base fields
-            ocid=data.get('ocid'),
-            id=data.get('id'),
-            date=data.get('date'),
-            tender=tender,
-            parties=data.get('parties', []),
-            buyer=data.get('buyer', {}),
-            
-            # Optional fields last
+            # Optional fields with defaults come last
             published_date=data.get('date')
         )
 
