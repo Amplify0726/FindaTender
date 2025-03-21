@@ -350,17 +350,9 @@ class UK3Notice(BaseNotice):
         )
 
 @dataclass
-class UK4Notice:
+class UK4Notice(BaseNotice):
     """Class for handling UK4 tender notices"""
-    # First the fields from BaseNotice with no defaults
-    ocid: str  
-    id: str    
-    date: str  
-    tender: Dict[str, Any]
-    parties: List[Dict[str, Any]]
-    buyer: Dict[str, str]
-
-    # Then UK4-specific required fields (no defaults)
+    # Required fields first (no defaults)
     notice_identifier: str
     procurement_identifier: str
     tender_title: str
@@ -378,7 +370,7 @@ class UK4Notice:
     buyer_name: str
     buyer_id: str
     
-    # Finally all optional fields with defaults
+    # Optional fields with defaults last
     language: str = "en"
     published_date: Optional[str] = None
     last_edited_date: Optional[str] = None
@@ -389,10 +381,6 @@ class UK4Notice:
     def from_api_data(cls, data: dict):
         """Create UK4Notice instance from API response data"""
         tender = data.get('tender', {})
-        
-        # Get latest amendment description if any
-        amendments = tender.get('amendments', [])
-        latest_amendment = amendments[0].get('description') if amendments else None
         
         # Extract award criteria from first lot
         award_criteria = []
@@ -406,15 +394,7 @@ class UK4Notice:
                 })
         
         return cls(
-            # BaseNotice required fields first
-            ocid=data.get('ocid'),
-            id=data.get('id'),
-            date=data.get('date'),
-            tender=tender,
-            parties=data.get('parties', []),
-            buyer=data.get('buyer', {}),
-            
-            # UK4-specific required fields
+            # Required fields first
             notice_identifier=data.get('id'),
             procurement_identifier=data.get('ocid'),
             tender_title=tender.get('title'),
@@ -432,7 +412,8 @@ class UK4Notice:
             buyer_name=data.get('buyer', {}).get('name'),
             buyer_id=data.get('buyer', {}).get('id'),
             
-            # Optional fields with defaults come last
+            # Optional fields with defaults
+            language="en",
             published_date=data.get('date')
         )
 

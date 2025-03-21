@@ -203,19 +203,9 @@ def fetch_and_process_data():
                                     buyer_name=release.get('buyer', {}).get('name'),
                                     buyer_id=release.get('buyer', {}).get('id'),
                                     
-                                    # Base notice fields
-                                    ocid=release.get('ocid'),
-                                    id=release.get('id'),
-                                    date=release.get('date'),
-                                    tender=release.get('tender', {}),
-                                    parties=release.get('parties', []),
-                                    buyer=release.get('buyer', {}),
-                                    
                                     # Optional fields
-                                    published_date=release.get('date'),
-                                    last_edited_date=None,
-                                    custom_fields={},
-                                    unused_fields=[]
+                                    language="en",
+                                    published_date=release.get('date')
                                 )
 
                                 # Extract award criteria from first lot if exists
