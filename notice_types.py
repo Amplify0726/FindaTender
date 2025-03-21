@@ -352,9 +352,17 @@ class UK3Notice(BaseNotice):
 @dataclass
 class UK4Notice(BaseNotice):
     """Class for handling UK4 tender notices"""
-    # Required fields first
+    # Base notice fields must come first since they're inherited
+    ocid: str  
+    id: str    
+    date: str  
+    tender: Dict[str, Any]
+    parties: List[Dict[str, Any]]
+    buyer: Dict[str, str]
+    
+    # Required fields specific to UK4
     notice_identifier: str
-    procurement_identifier: str  # OCID
+    procurement_identifier: str
     tender_title: str
     tender_description: str
     tender_status: str
@@ -362,19 +370,20 @@ class UK4Notice(BaseNotice):
     tender_value_currency: str
     procurement_method: str
     procurement_category: str
-    buyer_name: str
-    buyer_id: str
     cpv_codes: List[Dict]
     award_criteria: List[Dict]
     tender_period_end: str
     enquiry_period_end: str
     submission_method: str
+    buyer_name: str
+    buyer_id: str
     
     # Optional fields with defaults last
-    published_date: str = None
+    language: str = "en"
+    published_date: Optional[str] = None
     last_edited_date: Optional[str] = None
-    custom_fields: Dict[str, Any] = None
-    unused_fields: List[str] = None
+    custom_fields: Optional[Dict[str, Any]] = None
+    unused_fields: Optional[List[str]] = None
 
     @classmethod
     def from_api_data(cls, data: dict):
@@ -397,6 +406,15 @@ class UK4Notice(BaseNotice):
                 })
         
         return cls(
+            # Base notice fields
+            ocid=data.get('ocid'),
+            id=data.get('id'),
+            date=data.get('date'),
+            tender=tender,
+            parties=data.get('parties', []),
+            buyer=data.get('buyer', {}),
+            
+            # UK4 specific fields
             notice_identifier=data.get('id'),
             procurement_identifier=data.get('ocid'),
             tender_title=tender.get('title'),
@@ -413,8 +431,9 @@ class UK4Notice(BaseNotice):
             award_criteria=award_criteria,
             buyer_name=data.get('buyer', {}).get('name'),
             buyer_id=data.get('buyer', {}).get('id'),
-            published_date=data.get('date'),
-            last_edited_date=None  # Set from amendments if needed
+            
+            # Optional fields
+            published_date=data.get('date')
         )
 
     def validate(self) -> List[str]:
