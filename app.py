@@ -111,7 +111,46 @@ def fetch_and_process_data():
                             
                             # Process based on notice type
                             if notice_type == 'UK3':
-                                notice = UK3Notice.from_api_data(release)
+                                notice = UK3Notice(
+                                    # Required fields first
+                                    notice_identifier=release.get('id'),
+                                    procurement_identifier=release.get('ocid'),
+                                    published_date=release.get('date'),
+                                    commercial_tool=release['tender'].get('commercialTool'),
+                                    total_value_amount=release['tender']['value'].get('amount'),
+                                    total_value_amount_gross=release['tender']['value'].get('amountGross'),
+                                    total_value_currency=release['tender']['value'].get('currency'),
+                                    contract_dates=release['tender'].get('contractDates'),
+                                    procurement_category=release['tender'].get('mainProcurementCategory'),
+                                    cpv_codes=release['tender'].get('cpvCodes'),
+                                    lots=release['tender'].get('lots'),
+                                    framework_end_date=release['tender'].get('frameworkEndDate'),
+                                    framework_max_participants=release['tender'].get('frameworkMaxParticipants'),
+                                    framework_description=release['tender'].get('frameworkDescription'),
+                                    framework_award_method=release['tender'].get('frameworkAwardMethod'),
+                                    framework_buyers=release['tender'].get('frameworkBuyers'),
+                                    sme_suitable=release['tender'].get('smeSuitable'),
+                                    vcse_suitable=release['tender'].get('vcseSuitable'),
+                                    publication_date=release['tender'].get('publicationDate'),
+                                    tender_deadline=release['tender'].get('tenderDeadline'),
+                                    electronic_submission=release['tender'].get('electronicSubmission'),
+                                    submission_languages=release['tender'].get('submissionLanguages'),
+                                    award_date=release['tender'].get('awardDate'),
+                                    award_criteria=release['tender'].get('awardCriteria'),
+                                    trade_agreements=release['tender'].get('tradeAgreements'),
+                                    procedure_type=release['tender'].get('procedureType'),
+                                    procedure_description=release['tender'].get('procedureDescription'),
+                                    buyer_name=release['buyer'].get('name'),
+                                    buyer_id=release['buyer'].get('id'),
+                                    buyer_address=release['buyer'].get('address'),
+                                    buyer_contact=release['buyer'].get('contact'),
+                                    buyer_type=release['buyer'].get('type'),
+
+                                    # Optional fields
+                                    last_edited_date=release.get('lastEditedDate'),
+                                    lot_constraints=release['tender'].get('lotConstraints')
+                                )
+
                                 validation_errors = notice.validate()
                                 
                                 if validation_errors:
@@ -179,11 +218,6 @@ def fetch_and_process_data():
 
                                 results_by_type['UK3'].append(tender_info)
                             elif notice_type == 'UK4':
-                                # First validate OCDS fields
-                                errors, warnings = validate_ocds_response(data)
-                                if not is_valid:
-                                    print(f"Warning for {ocid}: {message}")
-                                
                                 notice = UK4Notice(
                                     # Required fields first
                                     notice_identifier=release.get('id'),
@@ -202,7 +236,7 @@ def fetch_and_process_data():
                                     submission_method=release['tender'].get('submissionMethodDetails'),
                                     buyer_name=release.get('buyer', {}).get('name'),
                                     buyer_id=release.get('buyer', {}).get('id'),
-                                    
+
                                     # Optional fields
                                     language="en",
                                     published_date=release.get('date')

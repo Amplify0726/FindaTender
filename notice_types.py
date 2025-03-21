@@ -232,13 +232,10 @@ class UK3Notice(BaseNotice):
     - Procedure section
     - Contracting authority section
     """
-    # Summary section fields
+    # Required fields first (no defaults)
     notice_identifier: str  # e.g. "2025/S 000-010758"
     procurement_identifier: str  # OCID
     published_date: datetime
-    last_edited_date: Optional[datetime]
-
-    # Scope section fields 
     commercial_tool: str  # "Establishes an open framework"
     total_value_amount: float
     total_value_amount_gross: float
@@ -246,45 +243,32 @@ class UK3Notice(BaseNotice):
     contract_dates: Dict[str, Any]  # Contains start, end, duration
     procurement_category: str  # e.g. "Services"
     cpv_codes: List[Dict[str, str]]
-    lot_constraints: Optional[str]
-
-    # Lots section
     lots: List[Lot]
-
-    # Framework section  
     framework_end_date: datetime
     framework_max_participants: int
     framework_description: str 
     framework_award_method: str
     framework_buyers: List[str]
-
-    # Participation section
     sme_suitable: bool
     vcse_suitable: bool
-
-    # Submission section
     publication_date: datetime
     tender_deadline: datetime
     electronic_submission: bool
     submission_languages: List[str]
     award_date: datetime
-
-    # Award criteria section
     award_criteria: List[AwardCriterion]
-
-    # Other information
     trade_agreements: List[str]
-
-    # Procedure section
     procedure_type: str
     procedure_description: str
-
-    # Contracting authority section
     buyer_name: str
     buyer_id: str  # PPON number
     buyer_address: Dict[str, str]
     buyer_contact: Dict[str, str]
     buyer_type: str
+
+    # Optional fields with defaults last
+    last_edited_date: Optional[datetime] = None
+    lot_constraints: Optional[str] = None
 
     def validate(self) -> List[str]:
         """Validate all fields according to business rules"""
