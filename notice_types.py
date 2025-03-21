@@ -350,12 +350,11 @@ class UK3Notice(BaseNotice):
         )
 
 @dataclass
-class UK4Notice:
+class UK4Notice(BaseNotice):
     """Class for handling UK4 tender notices"""
+    # Required fields first
     notice_identifier: str
     procurement_identifier: str  # OCID
-    published_date: str
-    last_edited_date: Optional[str]
     tender_title: str
     tender_description: str
     tender_status: str
@@ -363,14 +362,20 @@ class UK4Notice:
     tender_value_currency: str
     procurement_method: str
     procurement_category: str
+    buyer_name: str
+    buyer_id: str
     cpv_codes: List[Dict]
+    award_criteria: List[Dict]
     tender_period_end: str
     enquiry_period_end: str
     submission_method: str
-    award_criteria: List[Dict]
-    buyer_name: str
-    buyer_id: str
     
+    # Optional fields with defaults last
+    published_date: str = None
+    last_edited_date: Optional[str] = None
+    custom_fields: Dict[str, Any] = None
+    unused_fields: List[str] = None
+
     @classmethod
     def from_api_data(cls, data: dict):
         """Create UK4Notice instance from API response data"""
@@ -394,8 +399,6 @@ class UK4Notice:
         return cls(
             notice_identifier=data.get('id'),
             procurement_identifier=data.get('ocid'),
-            published_date=data.get('date'),
-            last_edited_date=None,  # Set from amendments if needed
             tender_title=tender.get('title'),
             tender_description=tender.get('description'),
             tender_status=tender.get('status'),
@@ -409,7 +412,9 @@ class UK4Notice:
             submission_method=tender.get('submissionMethodDetails'),
             award_criteria=award_criteria,
             buyer_name=data.get('buyer', {}).get('name'),
-            buyer_id=data.get('buyer', {}).get('id')
+            buyer_id=data.get('buyer', {}).get('id'),
+            published_date=data.get('date'),
+            last_edited_date=None  # Set from amendments if needed
         )
 
     def validate(self) -> List[str]:
