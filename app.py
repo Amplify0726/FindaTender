@@ -1,5 +1,7 @@
 import os
 import json
+import logging
+from typing import Tuple, Dict, Any
 from google.oauth2 import service_account
 import gspread
 import pandas as pd
@@ -8,6 +10,7 @@ from urllib.parse import quote_plus
 from flask import Flask, jsonify
 import time
 from threading import Thread
+from notice_types import UK3Notice, UK4Notice
 
 app = Flask(__name__)
 
@@ -38,15 +41,39 @@ SPREADSHEET_NAME = "Find a Tender Data"
 job_running = False
 last_run_time = None
 
+def validate_ocds_response(data: Dict[str, Any]) -> Tuple[bool, str]:
+    """Validate OCDS version and extensions"""
+    expected_version = "1.1"
+    required_extensions = [
+        "https://standard.open-contracting.org/profiles/eu/latest/en/extension.json",
+        "https://raw.githubusercontent.com/open-contracting-extensions/ocds_suitability_extension/master/extension.json",
+        "https://raw.githubusercontent.com/cabinetoffice/ocds_uk_extension/main/extension.json"
+    ]
+    
+    # Check OCDS version
+    version = data.get('version', '')
+    if not version.startswith(expected_version):
+        return False, f"Unexpected OCDS version: {version}, expected {expected_version}"
+    
+    # Check required extensions
+    extensions = set(data.get('extensions', []))
+    missing_extensions = [ext for ext in required_extensions if ext not in extensions]
+    if missing_extensions:
+        return False, f"Missing required extensions: {', '.join(missing_extensions)}"
+        
+    return True, "Valid OCDS response"
+
 def fetch_and_process_data():
     global job_running, last_run_time
     
-    # Set flag to indicate job is running
     job_running = True
     
     try:
         # Open the Google Sheets spreadsheet
         sh = gc.open(SPREADSHEET_NAME)
+
+        # Dictionary to store results by notice type
+        results_by_type = {}
 
         # Load OCIDs from the "OCIDs" sheet
         ocid_sheet = sh.worksheet("OCIDs")
@@ -56,9 +83,6 @@ def fetch_and_process_data():
         # Define API URL
         API_BASE_URL = "https://www.find-tender.service.gov.uk/api/1.0/ocdsReleasePackages/"
 
-        # Store results
-        results = []
-
         for ocid in ocid_list:
             # Ensure OCID is URL-encoded
             encoded_ocid = quote_plus(ocid.strip())
@@ -66,180 +90,161 @@ def fetch_and_process_data():
             
             if response.status_code == 200:
                 data = response.json()
+                
+                # Validate OCDS response
+                is_valid, message = validate_ocds_response(data)
+                if not is_valid:
+                    print(f"Warning for {ocid}: {message}")
+                
                 try:
-                    # Extract root-level data first
-                    publisher = data.get("publisher", {})
-                    license_info = data.get("license", "N/A")
-                    publication_policy = data.get("publicationPolicy", "N/A")
-                    published_date = data.get("publishedDate", "N/A")
-                    uri = data.get("uri", "N/A")
-                    extensions = data.get("extensions", [])
-                    
-                    release = data["releases"][0]  # Assuming we are always working with the first release
-                    
-                    # Extract document information
-                    documents = release.get("tender", {}).get("documents", [])
-                    document_types = [doc.get("documentType", "N/A") for doc in documents]
-                    document_descriptions = [doc.get("description", "N/A") for doc in documents]
-                    document_urls = [doc.get("url", "N/A") for doc in documents]
-                    document_formats = [doc.get("format", "N/A") for doc in documents]
-                    
-                    # Extract buyer information
-                    buyer_id = release.get("buyer", {}).get("id", "N/A")
-                    buyer_party = next((party for party in release.get("parties", []) 
-                                       if party.get("id") == buyer_id), {})
-                    
-                    buyer_contact_point = buyer_party.get("contactPoint", {})
-                    buyer_contact_name = buyer_contact_point.get("name", "N/A")
-                    buyer_contact_email = buyer_contact_point.get("email", "N/A")
-                    
-                    # Extract legal basis information
-                    legal_basis = release.get("tender", {}).get("legalBasis", {})
-                    legal_basis_id = legal_basis.get("id", "N/A")
-                    legal_basis_scheme = legal_basis.get("scheme", "N/A")
-                    legal_basis_uri = legal_basis.get("uri", "N/A")
-                    
-                    # Extract item information
-                    items = release.get("tender", {}).get("items", [])
-                    item_ids = [item.get("id", "N/A") for item in items]
-                    item_classifications = [
-                        f"{item.get('additionalClassifications', [{}])[0].get('id', 'N/A')} - {item.get('additionalClassifications', [{}])[0].get('description', 'N/A')}"
-                        for item in items if item.get('additionalClassifications')
-                    ]
-                    
-                    tender_info = {
-                        # Existing fields
-                        "OCID": release.get("ocid", "N/A"),
-                        "ID": release.get("id", "N/A"),
-                        "Tender ID": release.get("tender", {}).get("id", "N/A"),
-                        "Tender Title": release.get("tender", {}).get("title", "N/A"),
-                        "Tender Description": release.get("tender", {}).get("description", "N/A"),
-                        "Tender Status": release.get("tender", {}).get("status", "N/A"),
-                        "Tender Value Amount": release.get("tender", {}).get("value", {}).get("amount", "N/A"),
-                        "Tender Value Currency": release.get("tender", {}).get("value", {}).get("currency", "N/A"),
-                        "Procurement Method": release.get("tender", {}).get("procurementMethod", "N/A"),
-                        "Procurement Method Details": release.get("tender", {}).get("procurementMethodDetails", "N/A"),
-                        "Main Procurement Category": release.get("tender", {}).get("mainProcurementCategory", "N/A"),
-                        "Tender Period End Date": release.get("tender", {}).get("tenderPeriod", {}).get("endDate", "N/A"),
-                        "Tender Period Start Date": release.get("tender", {}).get("tenderPeriod", {}).get("startDate", "N/A"),
-                        "Enquiry Period End Date": release.get("tender", {}).get("enquiryPeriod", {}).get("endDate", "N/A"),
-                        "Tender Submission Method": release.get("tender", {}).get("submissionMethodDetails", "N/A"),
-                        "Tender Submission Terms": release.get("tender", {}).get("submissionTerms", {}).get("electronicSubmissionPolicy", "N/A"),
-                        "Tender Award Criteria": release.get("tender", {}).get("lots", [{}])[0].get("awardCriteria", {}).get("description", "N/A"),
-                        "Tender Lot Value Amount": release.get("tender", {}).get("lots", [{}])[0].get("value", {}).get("amount", "N/A"),
-                        "Tender Lot Value Currency": release.get("tender", {}).get("lots", [{}])[0].get("value", {}).get("currency", "N/A"),
-                        "Tender Lot Contract Period Start Date": release.get("tender", {}).get("lots", [{}])[0].get("contractPeriod", {}).get("startDate", "N/A"),
-                        "Tender Lot Contract Period End Date": release.get("tender", {}).get("lots", [{}])[0].get("contractPeriod", {}).get("endDate", "N/A"),
-                        "Tender Lot Suitability SME": release.get("tender", {}).get("lots", [{}])[0].get("suitability", {}).get("sme", "N/A"),
-                        "Buyer Name": release.get("buyer", {}).get("name", "N/A"),
-                        "Buyer ID": release.get("buyer", {}).get("id", "N/A"),
+                    for release in data.get('releases', []):
+                        notice_type = None
+                        for doc in release.get('planning', {}).get('documents', []):
+                            notice_type = doc.get('noticeType')
+                            if notice_type:
+                                break
                         
-                        # Fixed publisher fields - now from root level
-                        "Publisher Name": publisher.get("name", "N/A"),
-                        "Publisher UID": publisher.get("uid", "N/A"),
-                        "Publisher Scheme": publisher.get("scheme", "N/A"),
-                        "Publisher URI": publisher.get("uri", "N/A"),
-                        "License": license_info,
-                        "Publication Policy": publication_policy,
-                        
-                        # Fixed release fields
-                        "Release Date": release.get("date", "N/A"),
-                        "Release Tags": ", ".join(release.get("tag", [])),
-                        "Release Published Date": published_date,  # Now from root level
-                        "Release URI": uri,  # Now from root level
-                        "Extensions": ", ".join(extensions),  # Now from root level
-                        "Documents": ", ".join(document_urls) if document_urls else "N/A",
-                        
-                        # New fields
-                        "Initiation Type": release.get("initiationType", "N/A"),
-                        
-                        # Buyer detailed information
-                        "Buyer Address Street": buyer_party.get("address", {}).get("streetAddress", "N/A"),
-                        "Buyer Address Locality": buyer_party.get("address", {}).get("locality", "N/A"),
-                        "Buyer Address Postal Code": buyer_party.get("address", {}).get("postalCode", "N/A"),
-                        "Buyer Address Country": buyer_party.get("address", {}).get("country", "N/A"),
-                        "Buyer Address Country Name": buyer_party.get("address", {}).get("countryName", "N/A"),
-                        "Buyer Address Region": buyer_party.get("address", {}).get("region", "N/A"),
-                        "Buyer Contact Name": buyer_contact_name,
-                        "Buyer Contact Email": buyer_contact_email,
-                        "Buyer Roles": ", ".join(buyer_party.get("roles", [])),
-                        
-                        # Buyer classifications
-                        "Buyer Classification Scheme": next((c.get("scheme", "N/A") for c in buyer_party.get("details", {}).get("classifications", [])), "N/A"),
-                        "Buyer Classification ID": next((c.get("id", "N/A") for c in buyer_party.get("details", {}).get("classifications", [])), "N/A"),
-                        "Buyer Classification Description": next((c.get("description", "N/A") for c in buyer_party.get("details", {}).get("classifications", [])), "N/A"),
-                        
-                        # Legal basis
-                        "Legal Basis ID": legal_basis_id,
-                        "Legal Basis Scheme": legal_basis_scheme,
-                        "Legal Basis URI": legal_basis_uri,
-                        
-                        # Additional tender information
-                        "Tender Above Threshold": release.get("tender", {}).get("aboveThreshold", "N/A"),
-                        
-                        # Reserved participation location identifiers
-                        "Reserved Participation Location Identifiers": ", ".join(
-                            [identifier for identifier in release.get("tender", {})
-                            .get("otherRequirements", {})
-                            .get("reservedParticipationLocation", {})
-                            .get("gazetteer", {})
-                            .get("identifiers", [])]),
-                        
-                        # Document details (first 3 documents)
-                        "Document 1 Type": document_types[0] if len(document_types) > 0 else "N/A",
-                        "Document 1 Description": document_descriptions[0] if len(document_descriptions) > 0 else "N/A",
-                        "Document 1 URL": document_urls[0] if len(document_urls) > 0 else "N/A",
-                        "Document 1 Format": document_formats[0] if len(document_formats) > 0 else "N/A",
-                        
-                        "Document 2 Type": document_types[1] if len(document_types) > 1 else "N/A",
-                        "Document 2 Description": document_descriptions[1] if len(document_descriptions) > 1 else "N/A",
-                        "Document 2 URL": document_urls[1] if len(document_urls) > 1 else "N/A",
-                        "Document 2 Format": document_formats[1] if len(document_formats) > 1 else "N/A",
-                        
-                        "Document 3 Type": document_types[2] if len(document_types) > 2 else "N/A",
-                        "Document 3 Description": document_descriptions[2] if len(document_descriptions) > 2 else "N/A",
-                        "Document 3 URL": document_urls[2] if len(document_urls) > 2 else "N/A",
-                        "Document 3 Format": document_formats[2] if len(document_formats) > 2 else "N/A",
-                        
-                        # Item information
-                        "Item IDs": ", ".join(item_ids),
-                        "Item Classifications": ", ".join(item_classifications),
-                        
-                        # Gross value amounts (if available)
-                        "Tender Value Amount Gross": release.get("tender", {}).get("value", {}).get("amountGross", "N/A"),
-                        "Tender Lot Value Amount Gross": release.get("tender", {}).get("lots", [{}])[0].get("value", {}).get("amountGross", "N/A"),
-                    }
-                    results.append(tender_info)
+                        if notice_type:
+                            # Initialize list for this notice type if doesn't exist
+                            if notice_type not in results_by_type:
+                                results_by_type[notice_type] = []
+                            
+                            # Process based on notice type
+                            if notice_type == 'UK3':
+                                notice = UK3Notice.from_api_data(release)
+                                validation_errors = notice.validate()
+                                
+                                if validation_errors:
+                                    print(f"Warning - Validation issues for {notice.ocid}:")
+                                    for error in validation_errors:
+                                        print(f"  - {error}")
+                                
+                                tender_info = {
+                                    # Summary section
+                                    "Notice Type": "UK3",
+                                    "Notice Identifier": notice.notice_identifier,
+                                    "Procurement Identifier": notice.procurement_identifier,
+                                    "Published Date": notice.published_date,
+                                    "Last Edited Date": notice.last_edited_date,
+
+                                    # Scope section
+                                    "Commercial Tool": notice.commercial_tool,
+                                    "Total Value (excl VAT)": notice.total_value_amount,
+                                    "Total Value (incl VAT)": notice.total_value_amount_gross,
+                                    "Currency": notice.total_value_currency,
+                                    "Contract Start Date": notice.contract_dates['start'],
+                                    "Contract End Date": notice.contract_dates['end'],
+                                    "Contract Duration": notice.contract_dates['duration'],
+                                    "Procurement Category": notice.procurement_category,
+                                    "CPV Codes": ", ".join(f"{code['id']} - {code['description']}" for code in notice.cpv_codes),
+                                    "Lot Constraints": notice.lot_constraints,
+
+                                    # Lots are handled in a separate worksheet
+
+                                    # Framework section
+                                    "Framework End Date": notice.framework_end_date,
+                                    "Maximum Participants": notice.framework_max_participants,
+                                    "Framework Description": notice.framework_description,
+                                    "Award Method": notice.framework_award_method,
+                                    "Framework Buyers": "\n".join(notice.framework_buyers),
+
+                                    # Rest of sections...
+                                    "Validation Warnings": "\n".join(validation_errors) if validation_errors else "None",
+                                    "Custom Fields": json.dumps(notice.custom_fields) if notice.custom_fields else '',
+                                    "Unused OCDS Fields": ', '.join(notice.unused_fields) if notice.unused_fields else ''
+                                }
+                                
+                                # Create separate worksheet for lots detail
+                                lots_data = [{
+                                    "Lot Number": idx + 1,
+                                    "Lot Title": lot.title,
+                                    "Lot Description": lot.description,
+                                    "Value (excl VAT)": lot.value_amount,
+                                    "Value (incl VAT)": lot.value_amount_gross,
+                                    "Currency": lot.value_currency,
+                                    "SME Suitable": lot.sme_suitable,
+                                    "VCSE Suitable": lot.vcse_suitable,
+                                    # Award criteria for each lot...
+                                } for idx, lot in enumerate(notice.lots)]
+
+                                # Add lots worksheet
+                                if lots_data:
+                                    lots_df = pd.DataFrame(lots_data)
+                                    try:
+                                        lots_worksheet = sh.worksheet(f"{notice_type}_Lots") 
+                                    except gspread.exceptions.WorksheetNotFound:
+                                        lots_worksheet = sh.add_worksheet(title=f"{notice_type}_Lots", rows="1000", cols="50")
+                                    lots_worksheet.clear()
+                                    lots_worksheet.update([lots_df.columns.values.tolist()] + lots_df.values.tolist())
+
+                                results_by_type['UK3'].append(tender_info)
+                            elif notice_type == 'UK4':
+                                notice = UK4Notice.from_api_data(release)
+                                validation_errors = notice.validate()
+                                
+                                if validation_errors:
+                                    print(f"Warning - Validation issues for {notice.ocid}:")
+                                    for error in validation_errors:
+                                        print(f"  - {error}")
+                                
+                                tender_info = {
+                                    "Notice Type": "UK4",
+                                    "Notice Identifier": notice.notice_identifier,
+                                    "Procurement Identifier": notice.procurement_identifier,
+                                    "Published Date": notice.published_date,
+                                    "Last Edited Date": notice.last_edited_date,
+                                    "Tender Title": notice.tender_title,
+                                    "Tender Description": notice.tender_description,
+                                    "Tender Status": notice.tender_status,
+                                    "Tender Value Amount": notice.tender_value_amount,
+                                    "Tender Value Currency": notice.tender_value_currency,
+                                    "Procurement Method": notice.procurement_method,
+                                    "Procurement Category": notice.procurement_category,
+                                    "CPV Codes": ", ".join(f"{code['id']} - {code['description']}" for code in notice.cpv_codes),
+                                    "Tender Period End": notice.tender_period_end,
+                                    "Enquiry Period End": notice.enquiry_period_end,
+                                    "Submission Method": notice.submission_method,
+                                    "Award Criteria": "\n".join(f"{c['name']}: {c['weight']}% ({c['type']})" for c in notice.award_criteria),
+                                    "Buyer Name": notice.buyer_name,
+                                    "Buyer ID": notice.buyer_id,
+                                    "Validation Warnings": "\n".join(validation_errors) if validation_errors else "None",
+                                    "Custom Fields": json.dumps(notice.custom_fields) if notice.custom_fields else '',
+                                    "Unused OCDS Fields": ', '.join(notice.unused_fields) if notice.unused_fields else ''
+                                }
+                                
+                                results_by_type['UK4'].append(tender_info)
+                            # Add other notice types here as they are implemented
+                            
                 except (KeyError, IndexError) as e:
                     print(f"Error extracting data for OCID: {ocid} - {e}")
-            elif response.status_code == 404:
-                print(f"OCID {ocid} not found. Skipping...")
-            else:
-                print(f"Error fetching OCID {ocid}, Status Code: {response.status_code}")
 
-        # Write data back to Google Sheets
-        results_sheet = sh.worksheet("Results")
+        # Write each notice type to its own worksheet
+        for notice_type, results in results_by_type.items():
+            # Create or get worksheet for this notice type
+            try:
+                worksheet = sh.worksheet(notice_type)
+            except gspread.exceptions.WorksheetNotFound:
+                worksheet = sh.add_worksheet(title=notice_type, rows="1000", cols="100")
 
-        # Convert results to a DataFrame
-        df = pd.DataFrame(results)
+            if results:  # Only process if we have data
+                df = pd.DataFrame(results)
+                
+                # Clean data
+                def clean_value(val):
+                    if val is None:
+                        return ""
+                    if isinstance(val, (list, dict)):
+                        if not val:  # Empty list or dict
+                            return ""
+                        return str(val)
+                    return val
 
-        # Clean data - replace None, empty lists, and other problematic values
-        def clean_value(val):
-            if val is None:
-                return ""
-            if isinstance(val, (list, dict)):
-                if not val:  # Empty list or dict
-                    return ""
-                return str(val)
-            return val
+                for col in df.columns:
+                    df[col] = df[col].apply(clean_value)
 
-        # Apply cleaning to all DataFrame cells
-        for col in df.columns:
-            df[col] = df[col].apply(clean_value)
-
-        # Clear existing data and update the sheet
-        results_sheet.clear()
-        results_sheet.update([df.columns.values.tolist()] + df.values.tolist())
+                # Update sheet
+                worksheet.clear()
+                worksheet.update([df.columns.values.tolist()] + df.values.tolist())
 
         last_run_time = time.strftime("%Y-%m-%d %H:%M:%S")
         print(f"Data successfully written to Google Sheets at {last_run_time}!")
@@ -250,7 +255,6 @@ def fetch_and_process_data():
         print(error_message)
         return False, error_message
     finally:
-        # Reset flag when job is done
         job_running = False
 
 # Route for manual triggering of the data fetch
