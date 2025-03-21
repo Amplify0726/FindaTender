@@ -179,7 +179,58 @@ def fetch_and_process_data():
 
                                 results_by_type['UK3'].append(tender_info)
                             elif notice_type == 'UK4':
-                                notice = UK4Notice.from_api_data(release)
+                                # First validate OCDS fields
+                                errors, warnings = validate_ocds_response(data)
+                                if not is_valid:
+                                    print(f"Warning for {ocid}: {message}")
+                                
+                                notice = UK4Notice(
+                                    # Required fields first
+                                    notice_identifier=release.get('id'),
+                                    procurement_identifier=release.get('ocid'),
+                                    tender_title=release['tender'].get('title'),
+                                    tender_description=release['tender'].get('description'),
+                                    tender_status=release['tender'].get('status'),
+                                    tender_value_amount=release['tender'].get('value', {}).get('amountGross'),
+                                    tender_value_currency=release['tender'].get('value', {}).get('currency'),
+                                    procurement_method=release['tender'].get('procurementMethodDetails'),
+                                    procurement_category=release['tender'].get('mainProcurementCategory'),
+                                    cpv_codes=[item.get('additionalClassifications', [{}])[0] for item in release['tender'].get('items', [])],
+                                    award_criteria=[],  # Will populate from lots below
+                                    tender_period_end=release['tender'].get('tenderPeriod', {}).get('endDate'),
+                                    enquiry_period_end=release['tender'].get('enquiryPeriod', {}).get('endDate'),
+                                    submission_method=release['tender'].get('submissionMethodDetails'),
+                                    buyer_name=release.get('buyer', {}).get('name'),
+                                    buyer_id=release.get('buyer', {}).get('id'),
+                                    
+                                    # Base notice fields
+                                    ocid=release.get('ocid'),
+                                    id=release.get('id'),
+                                    date=release.get('date'),
+                                    tender=release.get('tender', {}),
+                                    parties=release.get('parties', []),
+                                    buyer=release.get('buyer', {}),
+                                    
+                                    # Optional fields
+                                    published_date=release.get('date'),
+                                    last_edited_date=None,
+                                    custom_fields={},
+                                    unused_fields=[]
+                                )
+
+                                # Extract award criteria from first lot if exists
+                                if release['tender'].get('lots'):
+                                    lot = release['tender']['lots'][0]
+                                    if lot.get('awardCriteria', {}).get('criteria'):
+                                        notice.award_criteria = [
+                                            {
+                                                'name': c.get('name'),
+                                                'type': c.get('type'),
+                                                'weight': c.get('numbers', [{}])[0].get('number')
+                                            }
+                                            for c in lot['awardCriteria']['criteria']
+                                        ]
+
                                 validation_errors = notice.validate()
                                 
                                 if validation_errors:

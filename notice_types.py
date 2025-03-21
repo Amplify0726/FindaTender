@@ -350,17 +350,9 @@ class UK3Notice(BaseNotice):
         )
 
 @dataclass
-class UK4Notice(BaseNotice):
+class UK4Notice:
     """Class for handling UK4 tender notices"""
-    # Base notice fields must come first since they're inherited
-    ocid: str  
-    id: str    
-    date: str  
-    tender: Dict[str, Any]
-    parties: List[Dict[str, Any]]
-    buyer: Dict[str, str]
-    
-    # Required fields specific to UK4
+    # Required fields first (no defaults)
     notice_identifier: str
     procurement_identifier: str
     tender_title: str
@@ -377,6 +369,14 @@ class UK4Notice(BaseNotice):
     submission_method: str
     buyer_name: str
     buyer_id: str
+    
+    # Base notice fields with required values
+    ocid: str  
+    id: str    
+    date: str  
+    tender: Dict[str, Any]
+    parties: List[Dict[str, Any]]
+    buyer: Dict[str, str]
     
     # Optional fields with defaults last
     language: str = "en"
@@ -406,15 +406,7 @@ class UK4Notice(BaseNotice):
                 })
         
         return cls(
-            # Base notice fields
-            ocid=data.get('ocid'),
-            id=data.get('id'),
-            date=data.get('date'),
-            tender=tender,
-            parties=data.get('parties', []),
-            buyer=data.get('buyer', {}),
-            
-            # UK4 specific fields
+            # Required fields first
             notice_identifier=data.get('id'),
             procurement_identifier=data.get('ocid'),
             tender_title=tender.get('title'),
@@ -425,14 +417,22 @@ class UK4Notice(BaseNotice):
             procurement_method=tender.get('procurementMethodDetails'),
             procurement_category=tender.get('mainProcurementCategory'),
             cpv_codes=[item.get('additionalClassifications', [{}])[0] for item in tender.get('items', [])],
+            award_criteria=award_criteria,
             tender_period_end=tender.get('tenderPeriod', {}).get('endDate'),
             enquiry_period_end=tender.get('enquiryPeriod', {}).get('endDate'),
             submission_method=tender.get('submissionMethodDetails'),
-            award_criteria=award_criteria,
             buyer_name=data.get('buyer', {}).get('name'),
             buyer_id=data.get('buyer', {}).get('id'),
             
-            # Optional fields
+            # Required base fields
+            ocid=data.get('ocid'),
+            id=data.get('id'),
+            date=data.get('date'),
+            tender=tender,
+            parties=data.get('parties', []),
+            buyer=data.get('buyer', {}),
+            
+            # Optional fields last
             published_date=data.get('date')
         )
 
