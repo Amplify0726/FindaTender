@@ -112,41 +112,38 @@ def fetch_and_process_data():
                             # Process based on notice type
                             if notice_type == 'UK3':
                                 notice = UK3Notice(
-                                    # Required fields first
                                     notice_identifier=release.get('id'),
                                     procurement_identifier=release.get('ocid'),
                                     published_date=release.get('date'),
-                                    commercial_tool=release['tender'].get('commercialTool'),
-                                    total_value_amount=release['tender']['value'].get('amount'),
-                                    total_value_amount_gross=release['tender']['value'].get('amountGross'),
-                                    total_value_currency=release['tender']['value'].get('currency'),
-                                    contract_dates=release['tender'].get('contractDates'),
-                                    procurement_category=release['tender'].get('mainProcurementCategory'),
-                                    cpv_codes=release['tender'].get('cpvCodes'),
-                                    lots=release['tender'].get('lots'),
-                                    framework_end_date=release['tender'].get('frameworkEndDate'),
-                                    framework_max_participants=release['tender'].get('frameworkMaxParticipants'),
-                                    framework_description=release['tender'].get('frameworkDescription'),
-                                    framework_award_method=release['tender'].get('frameworkAwardMethod'),
-                                    framework_buyers=release['tender'].get('frameworkBuyers'),
-                                    sme_suitable=release['tender'].get('smeSuitable'),
-                                    vcse_suitable=release['tender'].get('vcseSuitable'),
-                                    publication_date=release['tender'].get('publicationDate'),
-                                    tender_deadline=release['tender'].get('tenderDeadline'),
-                                    electronic_submission=release['tender'].get('electronicSubmission'),
-                                    submission_languages=release['tender'].get('submissionLanguages'),
-                                    award_date=release['tender'].get('awardDate'),
-                                    award_criteria=release['tender'].get('awardCriteria'),
-                                    trade_agreements=release['tender'].get('tradeAgreements'),
-                                    procedure_type=release['tender'].get('procedureType'),
-                                    procedure_description=release['tender'].get('procedureDescription'),
-                                    buyer_name=release['buyer'].get('name'),
-                                    buyer_id=release['buyer'].get('id'),
-                                    buyer_address=release['buyer'].get('address'),
-                                    buyer_contact=release['buyer'].get('contact'),
-                                    buyer_type=release['buyer'].get('type'),
-
-                                    # Optional fields
+                                    commercial_tool=release['tender'].get('commercialTool', ''),
+                                    total_value_amount=release['tender']['value'].get('amount', 0),
+                                    total_value_amount_gross=release['tender']['value'].get('amountGross', 0),
+                                    total_value_currency=release['tender']['value'].get('currency', 'GBP'),
+                                    contract_dates=release['tender'].get('contractDates', {'start': '', 'end': '', 'duration': ''}),
+                                    procurement_category=release['tender'].get('mainProcurementCategory', ''),
+                                    cpv_codes=release['tender'].get('cpvCodes', []),
+                                    lots=release['tender'].get('lots', []),
+                                    framework_end_date=release['tender'].get('frameworkEndDate', ''),
+                                    framework_max_participants=release['tender'].get('frameworkMaxParticipants', 0),
+                                    framework_description=release['tender'].get('frameworkDescription', ''),
+                                    framework_award_method=release['tender'].get('frameworkAwardMethod', ''),
+                                    framework_buyers=release['tender'].get('frameworkBuyers', []),
+                                    sme_suitable=release['tender'].get('smeSuitable', False),
+                                    vcse_suitable=release['tender'].get('vcseSuitable', False),
+                                    publication_date=release['tender'].get('publicationDate', ''),
+                                    tender_deadline=release['tender'].get('tenderDeadline', ''),
+                                    electronic_submission=release['tender'].get('electronicSubmission', False),
+                                    submission_languages=release['tender'].get('submissionLanguages', []),
+                                    award_date=release['tender'].get('awardDate', ''),
+                                    award_criteria=release['tender'].get('awardCriteria', []),
+                                    trade_agreements=release['tender'].get('tradeAgreements', []),
+                                    procedure_type=release['tender'].get('procedureType', ''),
+                                    procedure_description=release['tender'].get('procedureDescription', ''),
+                                    buyer_name=release['buyer'].get('name', ''),
+                                    buyer_id=release['buyer'].get('id', ''),
+                                    buyer_address=release['buyer'].get('address', {}),
+                                    buyer_contact=release['buyer'].get('contact', {}),
+                                    buyer_type=release['buyer'].get('type', ''),
                                     last_edited_date=release.get('lastEditedDate'),
                                     lot_constraints=release['tender'].get('lotConstraints')
                                 )
@@ -154,7 +151,7 @@ def fetch_and_process_data():
                                 validation_errors = notice.validate()
                                 
                                 if validation_errors:
-                                    print(f"Warning - Validation issues for {notice.ocid}:")
+                                    print(f"Warning - Validation issues for {notice.procurement_identifier}:")
                                     for error in validation_errors:
                                         print(f"  - {error}")
                                 
@@ -171,14 +168,12 @@ def fetch_and_process_data():
                                     "Total Value (excl VAT)": notice.total_value_amount,
                                     "Total Value (incl VAT)": notice.total_value_amount_gross,
                                     "Currency": notice.total_value_currency,
-                                    "Contract Start Date": notice.contract_dates['start'],
-                                    "Contract End Date": notice.contract_dates['end'],
-                                    "Contract Duration": notice.contract_dates['duration'],
+                                    "Contract Start Date": notice.contract_dates.get('start', ''),
+                                    "Contract End Date": notice.contract_dates.get('end', ''),
+                                    "Contract Duration": notice.contract_dates.get('duration', ''),
                                     "Procurement Category": notice.procurement_category,
-                                    "CPV Codes": ", ".join(f"{code['id']} - {code['description']}" for code in notice.cpv_codes),
+                                    "CPV Codes": ", ".join(f"{code.get('id', '')} - {code.get('description', '')}" for code in notice.cpv_codes),
                                     "Lot Constraints": notice.lot_constraints,
-
-                                    # Lots are handled in a separate worksheet
 
                                     # Framework section
                                     "Framework End Date": notice.framework_end_date,
@@ -189,55 +184,55 @@ def fetch_and_process_data():
 
                                     # Rest of sections...
                                     "Validation Warnings": "\n".join(validation_errors) if validation_errors else "None",
-                                    "Custom Fields": json.dumps(notice.custom_fields) if notice.custom_fields else '',
-                                    "Unused OCDS Fields": ', '.join(notice.unused_fields) if notice.unused_fields else ''
+                                    "Custom Fields": json.dumps(getattr(notice, 'custom_fields', {})) if hasattr(notice, 'custom_fields') and notice.custom_fields else '',
+                                    "Unused OCDS Fields": ', '.join(getattr(notice, 'unused_fields', [])) if hasattr(notice, 'unused_fields') and notice.unused_fields else ''
                                 }
                                 
-                                # Create separate worksheet for lots detail
-                                lots_data = [{
-                                    "Lot Number": idx + 1,
-                                    "Lot Title": lot.title,
-                                    "Lot Description": lot.description,
-                                    "Value (excl VAT)": lot.value_amount,
-                                    "Value (incl VAT)": lot.value_amount_gross,
-                                    "Currency": lot.value_currency,
-                                    "SME Suitable": lot.sme_suitable,
-                                    "VCSE Suitable": lot.vcse_suitable,
-                                    # Award criteria for each lot...
-                                } for idx, lot in enumerate(notice.lots)]
+                                # Create separate worksheet for lots detail if lots exist
+                                if notice.lots:
+                                    lots_data = []
+                                    for idx, lot in enumerate(notice.lots):
+                                        lot_data = {
+                                            "Lot Number": idx + 1,
+                                            "Lot Title": lot.get('title', ''),
+                                            "Lot Description": lot.get('description', ''),
+                                            "Value (excl VAT)": lot.get('value', {}).get('amount', 0),
+                                            "Value (incl VAT)": lot.get('value', {}).get('amountGross', 0),
+                                            "Currency": lot.get('value', {}).get('currency', ''),
+                                            "SME Suitable": lot.get('sme_suitable', False),
+                                            "VCSE Suitable": lot.get('vcse_suitable', False),
+                                        }
+                                        lots_data.append(lot_data)
 
-                                # Add lots worksheet
-                                if lots_data:
-                                    lots_df = pd.DataFrame(lots_data)
-                                    try:
-                                        lots_worksheet = sh.worksheet(f"{notice_type}_Lots") 
-                                    except gspread.exceptions.WorksheetNotFound:
-                                        lots_worksheet = sh.add_worksheet(title=f"{notice_type}_Lots", rows="1000", cols="50")
-                                    lots_worksheet.clear()
-                                    lots_worksheet.update([lots_df.columns.values.tolist()] + lots_df.values.tolist())
+                                    # Add lots worksheet
+                                    if lots_data:
+                                        lots_df = pd.DataFrame(lots_data)
+                                        try:
+                                            lots_worksheet = sh.worksheet(f"{notice_type}_Lots") 
+                                        except gspread.exceptions.WorksheetNotFound:
+                                            lots_worksheet = sh.add_worksheet(title=f"{notice_type}_Lots", rows="1000", cols="50")
+                                        lots_worksheet.clear()
+                                        lots_worksheet.update([lots_df.columns.values.tolist()] + lots_df.values.tolist())
 
                                 results_by_type['UK3'].append(tender_info)
                             elif notice_type == 'UK4':
                                 notice = UK4Notice(
-                                    # Required fields first
                                     notice_identifier=release.get('id'),
                                     procurement_identifier=release.get('ocid'),
-                                    tender_title=release['tender'].get('title'),
-                                    tender_description=release['tender'].get('description'),
-                                    tender_status=release['tender'].get('status'),
-                                    tender_value_amount=release['tender'].get('value', {}).get('amountGross'),
-                                    tender_value_currency=release['tender'].get('value', {}).get('currency'),
-                                    procurement_method=release['tender'].get('procurementMethodDetails'),
-                                    procurement_category=release['tender'].get('mainProcurementCategory'),
+                                    tender_title=release['tender'].get('title', ''),
+                                    tender_description=release['tender'].get('description', ''),
+                                    tender_status=release['tender'].get('status', ''),
+                                    tender_value_amount=release['tender'].get('value', {}).get('amountGross', 0),
+                                    tender_value_currency=release['tender'].get('value', {}).get('currency', 'GBP'),
+                                    procurement_method=release['tender'].get('procurementMethodDetails', ''),
+                                    procurement_category=release['tender'].get('mainProcurementCategory', ''),
                                     cpv_codes=[item.get('additionalClassifications', [{}])[0] for item in release['tender'].get('items', [])],
                                     award_criteria=[],  # Will populate from lots below
-                                    tender_period_end=release['tender'].get('tenderPeriod', {}).get('endDate'),
-                                    enquiry_period_end=release['tender'].get('enquiryPeriod', {}).get('endDate'),
-                                    submission_method=release['tender'].get('submissionMethodDetails'),
-                                    buyer_name=release.get('buyer', {}).get('name'),
-                                    buyer_id=release.get('buyer', {}).get('id'),
-
-                                    # Optional fields
+                                    tender_period_end=release['tender'].get('tenderPeriod', {}).get('endDate', ''),
+                                    enquiry_period_end=release['tender'].get('enquiryPeriod', {}).get('endDate', ''),
+                                    submission_method=release['tender'].get('submissionMethodDetails', ''),
+                                    buyer_name=release.get('buyer', {}).get('name', ''),
+                                    buyer_id=release.get('buyer', {}).get('id', ''),
                                     language="en",
                                     published_date=release.get('date')
                                 )
@@ -248,9 +243,9 @@ def fetch_and_process_data():
                                     if lot.get('awardCriteria', {}).get('criteria'):
                                         notice.award_criteria = [
                                             {
-                                                'name': c.get('name'),
-                                                'type': c.get('type'),
-                                                'weight': c.get('numbers', [{}])[0].get('number')
+                                                'name': c.get('name', ''),
+                                                'type': c.get('type', ''),
+                                                'weight': c.get('numbers', [{}])[0].get('number', 0)
                                             }
                                             for c in lot['awardCriteria']['criteria']
                                         ]
@@ -258,7 +253,7 @@ def fetch_and_process_data():
                                 validation_errors = notice.validate()
                                 
                                 if validation_errors:
-                                    print(f"Warning - Validation issues for {notice.ocid}:")
+                                    print(f"Warning - Validation issues for {notice.procurement_identifier}:")
                                     for error in validation_errors:
                                         print(f"  - {error}")
                                 
@@ -267,7 +262,7 @@ def fetch_and_process_data():
                                     "Notice Identifier": notice.notice_identifier,
                                     "Procurement Identifier": notice.procurement_identifier,
                                     "Published Date": notice.published_date,
-                                    "Last Edited Date": notice.last_edited_date,
+                                    "Last Edited Date": notice.last_edited_date if hasattr(notice, 'last_edited_date') else '',
                                     "Tender Title": notice.tender_title,
                                     "Tender Description": notice.tender_description,
                                     "Tender Status": notice.tender_status,
@@ -275,16 +270,16 @@ def fetch_and_process_data():
                                     "Tender Value Currency": notice.tender_value_currency,
                                     "Procurement Method": notice.procurement_method,
                                     "Procurement Category": notice.procurement_category,
-                                    "CPV Codes": ", ".join(f"{code['id']} - {code['description']}" for code in notice.cpv_codes),
+                                    "CPV Codes": ", ".join(f"{code.get('id', '')} - {code.get('description', '')}" for code in notice.cpv_codes if 'id' in code and 'description' in code),
                                     "Tender Period End": notice.tender_period_end,
                                     "Enquiry Period End": notice.enquiry_period_end,
                                     "Submission Method": notice.submission_method,
-                                    "Award Criteria": "\n".join(f"{c['name']}: {c['weight']}% ({c['type']})" for c in notice.award_criteria),
+                                    "Award Criteria": "\n".join(f"{c.get('name', '')}: {c.get('weight', '')}% ({c.get('type', '')})" for c in notice.award_criteria),
                                     "Buyer Name": notice.buyer_name,
                                     "Buyer ID": notice.buyer_id,
                                     "Validation Warnings": "\n".join(validation_errors) if validation_errors else "None",
-                                    "Custom Fields": json.dumps(notice.custom_fields) if notice.custom_fields else '',
-                                    "Unused OCDS Fields": ', '.join(notice.unused_fields) if notice.unused_fields else ''
+                                    "Custom Fields": json.dumps(getattr(notice, 'custom_fields', {})) if hasattr(notice, 'custom_fields') and notice.custom_fields else '',
+                                    "Unused OCDS Fields": ', '.join(getattr(notice, 'unused_fields', [])) if hasattr(notice, 'unused_fields') and notice.unused_fields else ''
                                 }
                                 
                                 results_by_type['UK4'].append(tender_info)
