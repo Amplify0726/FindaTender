@@ -1,10 +1,50 @@
+import os
+import json
+from google.oauth2 import service_account
+import gspread
+import pandas as pd
+import requests
+from urllib.parse import quote_plus
+from flask import Flask, jsonify
+import time
+from threading import Thread
+
+app = Flask(__name__)
+
+# Ensure the GOOGLE_SHEETS_CREDENTIALS environment variable is properly set
+google_sheets_credentials = os.getenv('GOOGLE_SHEETS_CREDENTIALS')
+
+if google_sheets_credentials is None:
+    raise ValueError("The environment variable 'GOOGLE_SHEETS_CREDENTIALS' is not set. Please set it correctly.")
+
+# Load Google Sheets credentials from the environment variable
+service_account_info = json.loads(google_sheets_credentials)
+
+# Define the required scopes
+scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive.readonly"]
+
+# Use the credentials and scopes
+credentials = service_account.Credentials.from_service_account_info(
+    service_account_info, scopes=scopes
+)
+
+# Authorize the client
+gc = gspread.authorize(credentials)
+
+# Define your spreadsheet name
+SPREADSHEET_NAME = "Find a Tender Data"
+
+# Flag to track if a job is currently running
+job_running = False
+last_run_time = None
+
+
 def fetch_and_process_data():
     global job_running, last_run_time
     
     # Set flag to indicate job is running
     job_running = True
     
-    SPREADSHEET_NAME = "Find a Tender Data"
     try:
         # Open the Google Sheets spreadsheet
         sh = gc.open(SPREADSHEET_NAME)
