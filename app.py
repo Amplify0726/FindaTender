@@ -4,6 +4,7 @@ def fetch_and_process_data():
     # Set flag to indicate job is running
     job_running = True
     
+    SPREADSHEET_NAME = "Find a Tender Data"
     try:
         # Open the Google Sheets spreadsheet
         sh = gc.open(SPREADSHEET_NAME)
