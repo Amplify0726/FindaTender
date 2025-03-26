@@ -79,7 +79,11 @@ def fetch_and_process_data():
                 logger.info("Creating Awards worksheet...")
                 awards_sheet = sh.add_worksheet("Awards", 1000, 100)
 
-        ocid_sheet = sh.worksheet("OCIDs")
+        try:
+            ocid_sheet = sh.worksheet("OCIDs")
+        except gspread.WorksheetNotFound:
+                logger.info("Creating OCIDs worksheet...")
+                ocid_sheet = sh.add_worksheet("OCIDs", 1000, 1)
         
     except Exception as e:
         logger.error(f"Error accessing worksheets: {str(e)}")
