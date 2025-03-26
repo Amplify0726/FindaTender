@@ -55,9 +55,12 @@ last_run_time = None
 def get_last_fetch_date():
     """Get the last successful fetch date from metadata sheet"""
     try:
+        # Open spreadsheet first
+        sh = gc.open(SPREADSHEET_NAME)
         metadata_sheet = sh.worksheet("Metadata")
     except gspread.WorksheetNotFound:
         logger.info("Creating Metadata worksheet...")
+        sh = gc.open(SPREADSHEET_NAME)
         metadata_sheet = sh.add_worksheet("Metadata", 2, 2)
         metadata_sheet.update('A1:B1', [['last_fetch_date', '2024-02-24T00:00:00']])
     
@@ -66,6 +69,7 @@ def get_last_fetch_date():
 def update_last_fetch_date(fetch_time):
     """Update the last successful fetch date"""
     try:
+        sh = gc.open(SPREADSHEET_NAME)
         metadata_sheet = sh.worksheet("Metadata")
         metadata_sheet.update('B1', fetch_time)
     except Exception as e:
