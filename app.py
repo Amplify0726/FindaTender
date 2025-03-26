@@ -84,10 +84,6 @@ def fetch_and_process_data():
         except gspread.WorksheetNotFound:
                 logger.info("Creating OCIDs worksheet...")
                 ocid_sheet = sh.add_worksheet("OCIDs", 1000, 1)
-        
-    except Exception as e:
-        logger.error(f"Error accessing worksheets: {str(e)}")
-        raise
 
         # Load OCIDs from the "OCIDs" sheet
         logger.info("Loading OCIDs...")
@@ -514,33 +510,29 @@ def fetch_and_process_data():
         notices_sheet = sh.worksheet("Notices")
         lots_sheet = sh.worksheet("Lots")
         awards_sheet = sh.worksheet("Awards")
-        
+    
         # Update sheets
         logger.info("Updating Google Sheets...")
-        try:
-            if not notices_df.empty:
-                logger.info("Updating Notices sheet...")
-                notices_sheet.update('A1', [notices_df.columns.values.tolist()] + notices_df.values.tolist(), value_input_option='RAW')
-            if not lots_df.empty:
-                logger.info("Updating Lots sheet...")
-                lots_sheet.update('A1', [lots_df.columns.values.tolist()] + lots_df.values.tolist(), value_input_option='RAW')
-            if not awards_df.empty:
-                logger.info("Updating Awards sheet...")
-                awards_sheet.update('A1', [awards_df.columns.values.tolist()] + awards_df.values.tolist(), value_input_option='RAW')
-        except Exception as e:
-            logger.error(f"Error updating sheets: {str(e)}")
-            raise
+        if not notices_df.empty:
+            logger.info("Updating Notices sheet...")
+            notices_sheet.update('A1', [notices_df.columns.values.tolist()] + notices_df.values.tolist(), value_input_option='RAW')
+        if not lots_df.empty:
+            logger.info("Updating Lots sheet...")
+            lots_sheet.update('A1', [lots_df.columns.values.tolist()] + lots_df.values.tolist(), value_input_option='RAW')
+        if not awards_df.empty:
+            logger.info("Updating Awards sheet...")
+            awards_sheet.update('A1', [awards_df.columns.values.tolist()] + awards_df.values.tolist(), value_input_option='RAW')
 
         last_run_time = time.strftime("%Y-%m-%d %H:%M:%S")
-        print(f"Data successfully written to Google Sheets at {last_run_time}!")
+        logger.info(f"Data successfully written to Google Sheets at {last_run_time}")
         return True, f"Data successfully processed at {last_run_time}"
-        
+
     except Exception as e:
         logger.error(f"Error in fetch_and_process_data: {str(e)}")
         return False, f"Error processing data: {str(e)}"
     finally:
         job_running = False
-   
+ 
 
 # Route for manual triggering of the data fetch
 @app.route('/run')
