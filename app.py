@@ -590,7 +590,6 @@ def fetch_and_process_data():
                     df[col] = df[col].apply(clean_value)
                     df[col] = df[col].replace([np.inf, -np.inf, np.nan], '')
 
-        notices_sheet = sh.worksheet("Notices")
         lots_sheet = sh.worksheet("Lots")
         awards_sheet = sh.worksheet("Awards")
     
