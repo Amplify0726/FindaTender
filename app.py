@@ -10,7 +10,7 @@ import time
 from threading import Thread
 import sys
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 # Configure logging
@@ -96,7 +96,7 @@ def fetch_releases():
         
         try:
             # Add timeout to prevent hanging
-            response = requests.get(base_url, params=params, timeout=30)
+            response = requests.get(base_url, params=params, timeout=60)
             response.raise_for_status()  # Raises an error for bad status codes
             
         except requests.Timeout:
@@ -143,10 +143,86 @@ def get_or_create_worksheet(spreadsheet, name, rows=1000, cols=100):
     try:
         worksheet = spreadsheet.worksheet(name)
         logger.info(f"Found existing {name} worksheet")
+
+        # Initialize metadata sheet if needed
+        if name == "Metadata":
+            if worksheet.acell('A1').value != 'last_fetch_date':
+                worksheet.update('A1:B1', [['last_fetch_date', '2024-02-24T00:00:00']])
+                logger.info("Initialized metadata sheet with start date")
+
     except gspread.WorksheetNotFound:
         logger.info(f"Creating {name} worksheet...")
         worksheet = spreadsheet.add_worksheet(name, rows, cols)
+
+        # Initialize new metadata sheet
+        if name == "Metadata":
+            worksheet.update('A1:B1', [['last_fetch_date', '2024-02-24T00:00:00']])
+            logger.info("Initialized new metadata sheet with start date")
     return worksheet
+
+def fetch_releases_in_batches():
+    """Fetch all releases in  batches"""
+    all_releases = []
+    
+    # Start date is Feb 24, 2024
+    start_date = datetime.strptime('2024-02-24T00:00:00', '%Y-%m-%dT%H:%M:%S')
+    end_date = datetime.now()
+    
+    # Create batches
+    current_start = start_date
+    while current_start < end_date:
+        current_end = min(current_start + timedelta(days=10), end_date)
+        
+        logger.info(f"Fetching batch from {current_start.strftime('%Y-%m-%dT%H:%M:%S')} to {current_end.strftime('%Y-%m-%dT%H:%M:%S')}")
+        
+        params = {
+            'updatedFrom': current_start.strftime('%Y-%m-%dT%H:%M:%S'),
+            'updatedTo': current_end.strftime('%Y-%m-%dT%H:%M:%S'),
+            'limit': 100
+        }
+        
+        page_count = 0
+        while True:
+            page_count += 1
+            try:
+                response = requests.get(
+                    "https://www.find-tender.service.gov.uk/api/1.0/ocdsReleasePackages",
+                    params=params,
+                    timeout=30
+                )
+                response.raise_for_status()
+                
+                data = response.json()
+                releases = data.get('releases', [])
+                
+                if not releases:
+                    break
+                    
+                org_releases = [r for r in releases if r.get("buyer", {}).get("id") == MY_ORG_ID]
+                logger.info(f"Batch {current_start.strftime('%Y-%m-%d')} - Page {page_count}: Found {len(org_releases)} matching releases")
+                all_releases.extend(org_releases)
+                
+                next_url = data.get('links', {}).get('next')
+                if not next_url:
+                    break
+                    
+                cursor = parse_qs(urlparse(next_url).query).get('cursor', [None])[0]
+                if not cursor:
+                    break
+                    
+                params['cursor'] = cursor
+                time.sleep(1)  # Be nice to the API
+                
+            except Exception as e:
+                logger.error(f"Error fetching page {page_count} of batch {current_start.strftime('%Y-%m-%d')}: {str(e)}")
+                break
+        
+        logger.info(f"Completed batch {current_start.strftime('%Y-%m-%d')} to {current_end.strftime('%Y-%m-%d')}")
+        current_start = current_end
+        
+    logger.info(f"Completed all batches. Found {len(all_releases)} total releases for your organization")
+    return all_releases
+
 
 def fetch_and_process_data():
     global job_running, last_run_time
@@ -162,8 +238,14 @@ def fetch_and_process_data():
         # Get or create metadata sheet first
         logger.info("Getting/creating metadata sheet...")
         metadata_sheet = get_or_create_worksheet(sh, "Metadata", rows=2, cols=2)
-        if metadata_sheet.acell('A1').value != 'last_fetch_date':
-            metadata_sheet.update('A1:B1', [['last_fetch_date', '2024-02-24T00:00:00']])
+        last_fetch = metadata_sheet.acell('B1').value
+        if last_fetch == '2024-02-24T00:00:00':
+            logger.info("Performing initial historical data load...")
+            releases = fetch_releases_in_batches()
+        else:
+            logger.info("Performing incremental update...")
+            releases = fetch_releases()
+        
 
         # Get or create required worksheets
         logger.info("Getting worksheet references...")
