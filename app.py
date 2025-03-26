@@ -78,6 +78,7 @@ def update_last_fetch_date(fetch_time):
 def fetch_releases():
     """Fetch all releases since last fetch date"""
     all_releases = []
+    page_count = 0
     base_url = "https://www.find-tender.service.gov.uk/api/1.0/ocdsReleasePackages"
     
     from_date = get_last_fetch_date()
@@ -90,34 +91,51 @@ def fetch_releases():
     }
     
     while True:
-        logger.info(f"Fetching releases from {from_date} to {to_date}")
-        response = requests.get(base_url, params=params)
+        page_count += 1
+        logger.info(f"Fetching page {page_count} (total records so far: {len(all_releases)})")
         
-        if response.status_code != 200:
-            logger.error(f"Error fetching releases: {response.status_code}")
+        try:
+            # Add timeout to prevent hanging
+            response = requests.get(base_url, params=params, timeout=30)
+            response.raise_for_status()  # Raises an error for bad status codes
+            
+        except requests.Timeout:
+            logger.error(f"Request timed out on page {page_count}")
+            break
+        except requests.RequestException as e:
+            logger.error(f"Request failed on page {page_count}: {str(e)}")
             break
             
         data = response.json()
         releases = data.get('releases', [])
-        logger.info(f"Fetched {len(releases)} releases")
+
+        if not releases:
+            logger.info("No more releases found")
+            break
         
         # Filter for your organization
         org_releases = [r for r in releases if r.get("buyer", {}).get("id") == MY_ORG_ID]
+        logger.info(f"Page {page_count}: Found {len(org_releases)} releases for your organization out of {len(releases)} total")
         all_releases.extend(org_releases)
         
         # Check for next page
         next_url = data.get('links', {}).get('next')
         if not next_url:
+            logger.info("No more pages available")
             break
             
         # Extract cursor from next_url for pagination
         parsed = urlparse(next_url)
         cursor = parse_qs(parsed.query).get('cursor', [None])[0]
         if not cursor:
+            logger.info("No cursor found in next URL")
             break
             
         params['cursor'] = cursor
-    
+
+        # Add a small delay between requests to be nice to the API
+        time.sleep(1)
+    logger.info(f"Completed fetch: Found {len(all_releases)} total releases for your organization")
     return all_releases
 
 def get_or_create_worksheet(spreadsheet, name, rows=1000, cols=100):
@@ -559,14 +577,31 @@ def fetch_and_process_data():
         # Update sheets
         logger.info("Updating Google Sheets...")
         if not notices_df.empty:
-            logger.info("Updating Notices sheet...")
-            notices_sheet.update('A1', [notices_df.columns.values.tolist()] + notices_df.values.tolist(), value_input_option='RAW')
+            logger.info("Appending to Notices sheet...")
+            # Get existing data
+            existing_data = notices_sheet.get_all_values()
+            if len(existing_data) > 1:  # If there's data beyond headers
+                # Keep headers, append new data
+                notices_sheet.append_rows(notices_df.values.tolist(), value_input_option='RAW')
+            else:
+                # First time - add headers and data
+                notices_sheet.update('A1', [notices_df.columns.values.tolist()] + notices_df.values.tolist(), value_input_option='RAW')
+
         if not lots_df.empty:
-            logger.info("Updating Lots sheet...")
-            lots_sheet.update('A1', [lots_df.columns.values.tolist()] + lots_df.values.tolist(), value_input_option='RAW')
+            logger.info("Appending to Lots sheet...")
+            existing_data = lots_sheet.get_all_values()
+            if len(existing_data) > 1:
+                lots_sheet.append_rows(lots_df.values.tolist(), value_input_option='RAW')
+            else:
+                lots_sheet.update('A1', [lots_df.columns.values.tolist()] + lots_df.values.tolist(), value_input_option='RAW')
+
         if not awards_df.empty:
-            logger.info("Updating Awards sheet...")
-            awards_sheet.update('A1', [awards_df.columns.values.tolist()] + awards_df.values.tolist(), value_input_option='RAW')
+            logger.info("Appending to Awards sheet...")
+            existing_data = awards_sheet.get_all_values()
+            if len(existing_data) > 1:
+                awards_sheet.append_rows(awards_df.values.tolist(), value_input_option='RAW')
+            else:
+                awards_sheet.update('A1', [awards_df.columns.values.tolist()] + awards_df.values.tolist(), value_input_option='RAW')
 
         last_run_time = time.strftime("%Y-%m-%d %H:%M:%S")
         logger.info(f"Data successfully written to Google Sheets at {last_run_time}")
