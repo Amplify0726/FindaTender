@@ -172,7 +172,9 @@ def fetch_and_process_data():
 
         # Get or create required worksheets
         logger.info("Getting worksheet references...")
-        notices_sheet = get_or_create_worksheet(sh, "Notices")
+        planning_sheet = get_or_create_worksheet(sh, "Planning_Notices")
+        tender_sheet = get_or_create_worksheet(sh, "Tender_Notices")
+        award_notice_sheet = get_or_create_worksheet(sh, "Award_Notices")
         lots_sheet = get_or_create_worksheet(sh, "Lots")
         awards_sheet = get_or_create_worksheet(sh, "Awards")
 
@@ -181,7 +183,9 @@ def fetch_and_process_data():
         logger.info(f"Found {len(releases)} releases to process")
 
         # Initialize results lists
-        notice_results = []
+        planning_results = []  # UK1-3
+        tender_results = []    # UK4
+        award_notice_results = []    # UK5-7
         lot_results = []
         award_results = []
 
@@ -261,7 +265,7 @@ def fetch_and_process_data():
                     "Contact Email": release.get("parties", [{}])[0].get("contactPoint", {}).get("email", "N/A"),
 
                     }
-                    notice_results.append(notice_fields)
+                    planning_results.append(notice_fields)
 
                     if len(lots) > 1:  # Only create lot entries for multiple lots
                         for idx, lot in enumerate(lots, 1):
@@ -354,7 +358,7 @@ def fetch_and_process_data():
                     "Contact Email": release.get("parties", [{}])[0].get("contactPoint", {}).get("email", "N/A"),
                 }
                 
-                notice_results.append(notice_fields)
+                tender_results.append(notice_fields)
                 
                 
                 if len(lots) > 1:  # Only create lot entries for multiple lots
@@ -475,7 +479,7 @@ def fetch_and_process_data():
                     "Contact Name": release.get("parties", [{}])[0].get("contactPoint", {}).get("name", "N/A"),
                     "Contact Email": release.get("parties", [{}])[0].get("contactPoint", {}).get("email", "N/A"),
                     }
-                notice_results.append(notice_fields)
+                award_notice_results.append(notice_fields)
 
                 # Check lots info for UK6 notices and data pull through
                 if len(lots) > 1:  # Only create lot entries for multiple lots
@@ -556,7 +560,9 @@ def fetch_and_process_data():
         
 
         # Convert results to DataFrames
-        notices_df = pd.DataFrame(notice_results)
+        planning_df = pd.DataFrame(planning_results)
+        tender_df = pd.DataFrame(tender_results)
+        award_df = pd.DataFrame(award_results)
         lots_df = pd.DataFrame(lot_results)
         awards_df = pd.DataFrame(award_results)
         
@@ -574,11 +580,10 @@ def fetch_and_process_data():
             return val
 
         # Clean DataFrames
-        for df in [notices_df, lots_df, awards_df]:
+        for df in [planning_df, tender_df, award_df, lots_df, awards_df]:
             if not df.empty:
                 for col in df.columns:
                     df[col] = df[col].apply(clean_value)
-                    # Replace any remaining problematic values
                     df[col] = df[col].replace([np.inf, -np.inf, np.nan], '')
 
         notices_sheet = sh.worksheet("Notices")
@@ -587,16 +592,24 @@ def fetch_and_process_data():
     
         # Update sheets
         logger.info("Updating Google Sheets...")
-        if not notices_df.empty:
-            logger.info("Appending to Notices sheet...")
+        if not planning_df.empty:
+            logger.info("Appending to Planning Notices sheet...")
             # Get existing data
-            existing_data = notices_sheet.get_all_values()
+            existing_data = planning_sheet.get_all_values()
             if len(existing_data) > 1:  # If there's data beyond headers
                 # Keep headers, append new data
-                notices_sheet.append_rows(notices_df.values.tolist(), value_input_option='RAW')
+                planning_sheet.append_rows(planning_df.values.tolist(), value_input_option='RAW')
             else:
                 # First time - add headers and data
-                notices_sheet.update('A1', [notices_df.columns.values.tolist()] + notices_df.values.tolist(), value_input_option='RAW')
+                planning_sheet.update('A1', [planning_df.columns.values.tolist()] + planning_df.values.tolist(), value_input_option='RAW')
+
+        if not tender_df.empty:
+            logger.info("Appending to Tender Notices sheet...")
+            existing_data = tender_sheet.get_all_values()
+            if len(existing_data) > 1:
+                tender_sheet.append_rows(tender_df.values.tolist(), value_input_option='RAW')
+            else:
+                tender_sheet.update('A1', [tender_df.columns.values.tolist()] + tender_df.values.tolist(), value_input_option='RAW')
 
         if not lots_df.empty:
             logger.info("Appending to Lots sheet...")
@@ -613,6 +626,14 @@ def fetch_and_process_data():
                 awards_sheet.append_rows(awards_df.values.tolist(), value_input_option='RAW')
             else:
                 awards_sheet.update('A1', [awards_df.columns.values.tolist()] + awards_df.values.tolist(), value_input_option='RAW')
+
+        if not award_df.empty:
+            logger.info("Appending to Award Notices sheet...")
+            existing_data = award_notice_sheet.get_all_values()
+            if len(existing_data) > 1:
+                award_notice_sheet.append_rows(award_df.values.tolist(), value_input_option='RAW')
+            else:
+                award_notice_sheet.update('A1', [award_df.columns.values.tolist()] + award_df.values.tolist(), value_input_option='RAW')
 
         current_time = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
         update_last_fetch_date(current_time)
