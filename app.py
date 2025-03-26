@@ -44,7 +44,7 @@ gc = gspread.authorize(credentials)
 SPREADSHEET_NAME = "Find a Tender Data"
 
 # Organisation filter - replace  with your organisation ID
-MY_ORG_ID = "GB-PPON-PYTC-9788-PZGW"  
+MY_ORG_ID = "GB-PPON-PJDG-6588-XDMM"  
 
 # Flag to track if a job is currently running
 job_running = False
@@ -78,7 +78,7 @@ def fetch_and_process_data():
         except gspread.WorksheetNotFound:
                 logger.info("Creating Awards worksheet...")
                 awards_sheet = sh.add_worksheet("Awards", 1000, 100)
-                
+
             ocid_sheet = sh.worksheet("OCIDs")
         except Exception as e:
             logger.error(f"Error accessing worksheets: {str(e)}")
