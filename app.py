@@ -71,11 +71,14 @@ def get_last_fetch_date():
 def update_last_fetch_date(fetch_time):
     """Update the last successful fetch date"""
     try:
+        logger.info(f"Attempting to update last fetch date to {fetch_time}")
         sh = gc.open(SPREADSHEET_NAME)
         metadata_sheet = sh.worksheet("Metadata")
         metadata_sheet.update('B1', fetch_time)
+        logger.info(f"Successfully updated last fetch date to {fetch_time}")
     except Exception as e:
         logger.error(f"Error updating last fetch date: {str(e)}")
+        raise  # Re-raise the exception to be caught by the main error handler
 
 def fetch_releases():
     """Fetch all releases since last fetch date"""
@@ -308,16 +311,8 @@ def fetch_and_process_data():
                     "Value inc VAT": release.get("tender", {}).get("value", {}).get("amountGross", "N/A"),
                     "Currency": release.get("tender", {}).get("value", {}).get("currency", "N/A"),
                     "Threshold": "Above the relevant threshold" if release.get("tender", {}).get("aboveThreshold", False) else "Below the relevant threshold",
-                    "Contract Start Date": (
-                        release.get("tender", {}).get("lots", [{}])[0].get("contractPeriod", {}).get("startDate", "N/A")
-                        if len(lots) == 1
-                        else "See lots sheet for dates"
-                    ),
-                    "Contract End Date": (
-                        release.get("tender", {}).get("lots", [{}])[0].get("contractPeriod", {}).get("endDate", "N/A")
-                        if len(lots) == 1
-                        else "See lots sheet for dates"
-                    ),
+                    "Contract Start Date": release.get("tender", {}).get("lots", [{}])[0].get("contractPeriod", {}).get("startDate", "N/A"),
+                    "Contract End Date": release.get("tender", {}).get("lots", [{}])[0].get("contractPeriod", {}).get("endDate", "N/A"),
                     "Renewal": release.get("tender", {}).get("renewal", {}).get("description", "N/A"),
                     "Options": release.get("tender", {}).get("options", {}).get("description", "N/A"),
                     "Main Category": release.get("tender", {}).get("mainProcurementCategory", "N/A"),
