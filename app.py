@@ -58,12 +58,38 @@ def fetch_and_process_data():
     
     try:
         # Open the Google Sheets spreadsheet
+        logger.info("Attempting to open Google Sheet...")
         sh = gc.open(SPREADSHEET_NAME)
 
+        # Get worksheet references
+        logger.info("Getting worksheet references...")
+        try:
+            notices_sheet = sh.worksheet("Notices")
+        except gspread.WorksheetNotFound:
+                logger.info("Creating Notices worksheet...")
+                notices_sheet = sh.add_worksheet("Notices", 1000, 100)
+        try:
+            lots_sheet = sh.worksheet("Lots")
+        except gspread.WorksheetNotFound:
+                logger.info("Creating Lots worksheet...")
+                lots_sheet = sh.add_worksheet("Lots", 1000, 100)
+        try:        
+            awards_sheet = sh.worksheet("Awards")
+        except gspread.WorksheetNotFound:
+                logger.info("Creating Awards worksheet...")
+                awards_sheet = sh.add_worksheet("Awards", 1000, 100)
+                
+            ocid_sheet = sh.worksheet("OCIDs")
+        except Exception as e:
+            logger.error(f"Error accessing worksheets: {str(e)}")
+            raise
+
         # Load OCIDs from the "OCIDs" sheet
+        logger.info("Loading OCIDs...")
         ocid_sheet = sh.worksheet("OCIDs")
         ocid_list = ocid_sheet.col_values(1)  # Reads all OCIDs from column A
         ocid_list = [ocid for ocid in ocid_list if ocid.strip()]  # Remove empty values
+        logger.info(f"Found {len(ocid_list)} OCIDs to process")
 
         # Initialize results lists
         notice_results = []
@@ -484,13 +510,21 @@ def fetch_and_process_data():
         lots_sheet = sh.worksheet("Lots")
         awards_sheet = sh.worksheet("Awards")
         
-        # Update sheets without clearing first
-        if not notices_df.empty:
-            notices_sheet.update('A1', [notices_df.columns.values.tolist()] + notices_df.values.tolist(), value_input_option='RAW')
-        if not lots_df.empty:
-            lots_sheet.update('A1', [lots_df.columns.values.tolist()] + lots_df.values.tolist(), value_input_option='RAW')
-        if not awards_df.empty:
-            awards_sheet.update('A1', [awards_df.columns.values.tolist()] + awards_df.values.tolist(), value_input_option='RAW')
+        # Update sheets
+        logger.info("Updating Google Sheets...")
+        try:
+            if not notices_df.empty:
+                logger.info("Updating Notices sheet...")
+                notices_sheet.update('A1', [notices_df.columns.values.tolist()] + notices_df.values.tolist(), value_input_option='RAW')
+            if not lots_df.empty:
+                logger.info("Updating Lots sheet...")
+                lots_sheet.update('A1', [lots_df.columns.values.tolist()] + lots_df.values.tolist(), value_input_option='RAW')
+            if not awards_df.empty:
+                logger.info("Updating Awards sheet...")
+                awards_sheet.update('A1', [awards_df.columns.values.tolist()] + awards_df.values.tolist(), value_input_option='RAW')
+        except Exception as e:
+            logger.error(f"Error updating sheets: {str(e)}")
+            raise
 
         last_run_time = time.strftime("%Y-%m-%d %H:%M:%S")
         print(f"Data successfully written to Google Sheets at {last_run_time}!")
