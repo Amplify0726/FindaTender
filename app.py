@@ -79,10 +79,11 @@ def fetch_and_process_data():
                 logger.info("Creating Awards worksheet...")
                 awards_sheet = sh.add_worksheet("Awards", 1000, 100)
 
-            ocid_sheet = sh.worksheet("OCIDs")
-        except Exception as e:
-            logger.error(f"Error accessing worksheets: {str(e)}")
-            raise
+        ocid_sheet = sh.worksheet("OCIDs")
+        
+    except Exception as e:
+        logger.error(f"Error accessing worksheets: {str(e)}")
+        raise
 
         # Load OCIDs from the "OCIDs" sheet
         logger.info("Loading OCIDs...")
