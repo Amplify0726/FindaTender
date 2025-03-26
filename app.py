@@ -496,7 +496,12 @@ def fetch_and_process_data():
         print(f"Data successfully written to Google Sheets at {last_run_time}!")
         return True, f"Data successfully processed at {last_run_time}"
         
-        
+    except Exception as e:
+        logger.error(f"Error in fetch_and_process_data: {str(e)}")
+        return False, f"Error processing data: {str(e)}"
+    finally:
+        job_running = False
+   
 
 # Route for manual triggering of the data fetch
 @app.route('/run')
