@@ -53,11 +53,14 @@ def fetch_and_process_data():
         ocid_list = ocid_sheet.col_values(1)  # Reads all OCIDs from column A
         ocid_list = [ocid for ocid in ocid_list if ocid.strip()]  # Remove empty values
 
+        # Initialize results lists
+        notice_results = []
+        lot_results = []
+        award_results = []
+
         # Define API URL
         API_BASE_URL = "https://www.find-tender.service.gov.uk/api/1.0/ocdsReleasePackages/"
 
-        # Store results
-        results = []
 
         for ocid in ocid_list:
             # Ensure OCID is URL-encoded
@@ -66,162 +69,391 @@ def fetch_and_process_data():
             
             if response.status_code == 200:
                 data = response.json()
-                try:
-                    # Extract root-level data first
-                    publisher = data.get("publisher", {})
-                    license_info = data.get("license", "N/A")
-                    publication_policy = data.get("publicationPolicy", "N/A")
-                    published_date = data.get("publishedDate", "N/A")
-                    uri = data.get("uri", "N/A")
-                    extensions = data.get("extensions", [])
-                    
-                    release = data["releases"][0]  # Assuming we are always working with the first release
-                    
-                    # Extract document information
-                    documents = release.get("tender", {}).get("documents", [])
-                    document_types = [doc.get("documentType", "N/A") for doc in documents]
-                    document_descriptions = [doc.get("description", "N/A") for doc in documents]
-                    document_urls = [doc.get("url", "N/A") for doc in documents]
-                    document_formats = [doc.get("format", "N/A") for doc in documents]
-                    
-                    # Extract buyer information
-                    buyer_id = release.get("buyer", {}).get("id", "N/A")
-                    buyer_party = next((party for party in release.get("parties", []) 
-                                       if party.get("id") == buyer_id), {})
-                    
-                    buyer_contact_point = buyer_party.get("contactPoint", {})
-                    buyer_contact_name = buyer_contact_point.get("name", "N/A")
-                    buyer_contact_email = buyer_contact_point.get("email", "N/A")
-                    
-                    # Extract legal basis information
-                    legal_basis = release.get("tender", {}).get("legalBasis", {})
-                    legal_basis_id = legal_basis.get("id", "N/A")
-                    legal_basis_scheme = legal_basis.get("scheme", "N/A")
-                    legal_basis_uri = legal_basis.get("uri", "N/A")
-                    
-                    # Extract item information
-                    items = release.get("tender", {}).get("items", [])
-                    item_ids = [item.get("id", "N/A") for item in items]
-                    item_classifications = [
-                        f"{item.get('additionalClassifications', [{}])[0].get('id', 'N/A')} - {item.get('additionalClassifications', [{}])[0].get('description', 'N/A')}"
-                        for item in items if item.get('additionalClassifications')
-                    ]
-                    
-                    tender_info = {
-                        # Existing fields
+                # Process single release
+                release = data["releases"][0]
+
+                contract_docs = release.get("contracts", [])[0].get("documents", []) if release.get("contracts") else []
+                award_docs = release.get("awards", [])[0].get("documents", []) if release.get("awards") else []
+                tender_docs = release.get("tender", {}).get("documents", [])
+                planning_docs = release.get("planning", {}).get("documents", [])
+
+                # Get documents in priority order
+                if contract_docs:
+                    documents = contract_docs
+                elif award_docs:
+                    documents = award_docs
+                elif tender_docs:
+                    documents = tender_docs
+                elif planning_docs:
+                    documents = planning_docs
+                else:
+                    continue
+
+                notice_type = documents[-1].get("noticeType")
+                lots = release.get("tender", {}).get("lots", [])
+                is_update = any('update' in tag.lower() for tag in release.get('tag', []))
+
+                if notice_type in ["UK1", "UK2", "UK3"]:
+                    if "planning" in release:
+                        # Extract notice fields
+                        notice_fields = {
                         "OCID": release.get("ocid", "N/A"),
-                        "ID": release.get("id", "N/A"),
-                        "Tender ID": release.get("tender", {}).get("id", "N/A"),
-                        "Tender Title": release.get("tender", {}).get("title", "N/A"),
-                        "Tender Description": release.get("tender", {}).get("description", "N/A"),
-                        "Tender Status": release.get("tender", {}).get("status", "N/A"),
-                        "Tender Value Amount": release.get("tender", {}).get("value", {}).get("amount", "N/A"),
-                        "Tender Value Currency": release.get("tender", {}).get("value", {}).get("currency", "N/A"),
-                        "Procurement Method": release.get("tender", {}).get("procurementMethod", "N/A"),
-                        "Procurement Method Details": release.get("tender", {}).get("procurementMethodDetails", "N/A"),
-                        "Main Procurement Category": release.get("tender", {}).get("mainProcurementCategory", "N/A"),
-                        "Tender Period End Date": release.get("tender", {}).get("tenderPeriod", {}).get("endDate", "N/A"),
-                        "Tender Period Start Date": release.get("tender", {}).get("tenderPeriod", {}).get("startDate", "N/A"),
-                        "Enquiry Period End Date": release.get("tender", {}).get("enquiryPeriod", {}).get("endDate", "N/A"),
-                        "Tender Submission Method": release.get("tender", {}).get("submissionMethodDetails", "N/A"),
-                        "Tender Submission Terms": release.get("tender", {}).get("submissionTerms", {}).get("electronicSubmissionPolicy", "N/A"),
-                        "Tender Award Criteria": release.get("tender", {}).get("lots", [{}])[0].get("awardCriteria", {}).get("description", "N/A"),
-                        "Tender Lot Value Amount": release.get("tender", {}).get("lots", [{}])[0].get("value", {}).get("amount", "N/A"),
-                        "Tender Lot Value Currency": release.get("tender", {}).get("lots", [{}])[0].get("value", {}).get("currency", "N/A"),
-                        "Tender Lot Contract Period Start Date": release.get("tender", {}).get("lots", [{}])[0].get("contractPeriod", {}).get("startDate", "N/A"),
-                        "Tender Lot Contract Period End Date": release.get("tender", {}).get("lots", [{}])[0].get("contractPeriod", {}).get("endDate", "N/A"),
-                        "Tender Lot Suitability SME": release.get("tender", {}).get("lots", [{}])[0].get("suitability", {}).get("sme", "N/A"),
-                        "Buyer Name": release.get("buyer", {}).get("name", "N/A"),
-                        "Buyer ID": release.get("buyer", {}).get("id", "N/A"),
-                        
-                        # Fixed publisher fields - now from root level
-                        "Publisher Name": publisher.get("name", "N/A"),
-                        "Publisher UID": publisher.get("uid", "N/A"),
-                        "Publisher Scheme": publisher.get("scheme", "N/A"),
-                        "Publisher URI": publisher.get("uri", "N/A"),
-                        "License": license_info,
-                        "Publication Policy": publication_policy,
-                        
-                        # Fixed release fields
-                        "Release Date": release.get("date", "N/A"),
-                        "Release Tags": ", ".join(release.get("tag", [])),
-                        "Release Published Date": published_date,  # Now from root level
-                        "Release URI": uri,  # Now from root level
-                        "Extensions": ", ".join(extensions),  # Now from root level
-                        "Documents": ", ".join(document_urls) if document_urls else "N/A",
-                        
-                        # New fields
-                        "Initiation Type": release.get("initiationType", "N/A"),
-                        
-                        # Buyer detailed information
-                        "Buyer Address Street": buyer_party.get("address", {}).get("streetAddress", "N/A"),
-                        "Buyer Address Locality": buyer_party.get("address", {}).get("locality", "N/A"),
-                        "Buyer Address Postal Code": buyer_party.get("address", {}).get("postalCode", "N/A"),
-                        "Buyer Address Country": buyer_party.get("address", {}).get("country", "N/A"),
-                        "Buyer Address Country Name": buyer_party.get("address", {}).get("countryName", "N/A"),
-                        "Buyer Address Region": buyer_party.get("address", {}).get("region", "N/A"),
-                        "Buyer Contact Name": buyer_contact_name,
-                        "Buyer Contact Email": buyer_contact_email,
-                        "Buyer Roles": ", ".join(buyer_party.get("roles", [])),
-                        
-                        # Buyer classifications
-                        "Buyer Classification Scheme": next((c.get("scheme", "N/A") for c in buyer_party.get("details", {}).get("classifications", [])), "N/A"),
-                        "Buyer Classification ID": next((c.get("id", "N/A") for c in buyer_party.get("details", {}).get("classifications", [])), "N/A"),
-                        "Buyer Classification Description": next((c.get("description", "N/A") for c in buyer_party.get("details", {}).get("classifications", [])), "N/A"),
-                        
-                        # Legal basis
-                        "Legal Basis ID": legal_basis_id,
-                        "Legal Basis Scheme": legal_basis_scheme,
-                        "Legal Basis URI": legal_basis_uri,
-                        
-                        # Additional tender information
-                        "Tender Above Threshold": release.get("tender", {}).get("aboveThreshold", "N/A"),
-                        
-                        # Reserved participation location identifiers
-                        "Reserved Participation Location Identifiers": ", ".join(
-                            [identifier for identifier in release.get("tender", {})
-                            .get("otherRequirements", {})
-                            .get("reservedParticipationLocation", {})
-                            .get("gazetteer", {})
-                            .get("identifiers", [])]),
-                        
-                        # Document details (first 3 documents)
-                        "Document 1 Type": document_types[0] if len(document_types) > 0 else "N/A",
-                        "Document 1 Description": document_descriptions[0] if len(document_descriptions) > 0 else "N/A",
-                        "Document 1 URL": document_urls[0] if len(document_urls) > 0 else "N/A",
-                        "Document 1 Format": document_formats[0] if len(document_formats) > 0 else "N/A",
-                        
-                        "Document 2 Type": document_types[1] if len(document_types) > 1 else "N/A",
-                        "Document 2 Description": document_descriptions[1] if len(document_descriptions) > 1 else "N/A",
-                        "Document 2 URL": document_urls[1] if len(document_urls) > 1 else "N/A",
-                        "Document 2 Format": document_formats[1] if len(document_formats) > 1 else "N/A",
-                        
-                        "Document 3 Type": document_types[2] if len(document_types) > 2 else "N/A",
-                        "Document 3 Description": document_descriptions[2] if len(document_descriptions) > 2 else "N/A",
-                        "Document 3 URL": document_urls[2] if len(document_urls) > 2 else "N/A",
-                        "Document 3 Format": document_formats[2] if len(document_formats) > 2 else "N/A",
-                        
-                        # Item information
-                        "Item IDs": ", ".join(item_ids),
-                        "Item Classifications": ", ".join(item_classifications),
-                        
-                        # Gross value amounts (if available)
-                        "Tender Value Amount Gross": release.get("tender", {}).get("value", {}).get("amountGross", "N/A"),
-                        "Tender Lot Value Amount Gross": release.get("tender", {}).get("lots", [{}])[0].get("value", {}).get("amountGross", "N/A"),
+                        "Notice Type": notice_type,
+                        "Is Update": is_update,
+                        "Published Date": release.get("date", "N/A"),
+                        "Notice ID": release.get("id", "N/A"),
+                        "Reference": release.get("tender", {}).get("id", "N/A"),
+                        "Notice Title": release.get("tender", {}).get("title", "N/A"),
+                        "Notice Description": release.get("tender", {}).get("description", "N/A"),
+                        "Value ex VAT": release.get("tender", {}).get("value", {}).get("amount", "N/A"),
+                        "Value inc VAT": release.get("tender", {}).get("value", {}).get("amountGross", "N/A"),
+                        "Currency": release.get("tender", {}).get("value", {}).get("currency", "N/A"),
+                        "Threshold": "Above the relevant threshold" if release.get("tender", {}).get("aboveThreshold", False) else "Below the relevant threshold",
+                        # Assume contract dates are same for all lots
+                        "Contract Start Date": release.get("tender", {}).get("lots", [{}])[0].get("contractPeriod", {}).get("startDate", "N/A"),
+                        "Contract End Date": release.get("tender", {}).get("lots", [{}])[0].get("contractPeriod", {}).get("endDate", "N/A"),
+                        "Publication date of tender notice (estimated)": release.get("tender", {}).get("communication", {}).get("futureNoticeDate", "N/A"),
+                        "Main Category": release.get("tender", {}).get("mainProcurementCategory", "N/A"),
+                        "CPV Code": release.get("tender", {}).get("items", [{}])[0].get("additionalClassifications", [{}])[0].get("id", "N/A") if len(lots) == 1
+                            else "See lots sheet for CPV codes",
+                        "Submission Deadline": release.get("tender", {}).get("tenderPeriod", {}).get("endDate", "N/A"),
+                        "Enquiry Deadline": release.get("planning", {}).get("milestones", [{}])[0].get("dueDate", "N/A"),
+                        "Estimated Award Date": release.get("tender", {}).get("awardPeriod", {}).get("endDate", "N/A"),
+                        "Award Criteria": (
+                                "Detailed in lots sheet" if len(lots) > 1
+                                else (
+                                    release.get("tender", {}).get("lots", [{}])[0].get("awardCriteria", {}).get("description", "N/A")
+                                    if not release.get("tender", {}).get("lots", [{}])[0].get("awardCriteria", {}).get("criteria")
+                                    else "Refer to notice for detailed weightings"
+                                )
+                            ),
+                        "Framework Agreement": (
+                                "Closed Framework" if release.get("tender", {}).get("techniques", {}).get("type") == "closed"
+                                else "Open Framework" if release.get("tender", {}).get("techniques", {}).get("type") == "open"
+                                else "N/A"
+                            ), 
+                        "Call off method": (
+                                "With competition" if release.get("tender", {}).get("techniques", {}).get("frameworkAgreement", {}).get("method") == "withReopeningCompetition"
+                                else "Without competition" if release.get("tender", {}).get("techniques", {}).get("frameworkAgreement", {}).get("method") == "withoutReopeningCompetition"
+                                else "Either with or without competition" if release.get("tender", {}).get("techniques", {}).get("frameworkAgreement", {}).get("method") == "withAndWithoutReopeningCompetition"
+                                else "N/A"
+                            ),
+                        "Procedure Type": release.get("tender", {}).get("procurementMethodDetails", "N/A"),
+                        "Procedure Description": release.get("tender", {}).get("procedure", {}).get("features", "N/A"),
+                        "Contracting Authority": release.get("buyer", {}).get("name", "N/A"),
+                        "PPON": release.get("buyer", {}).get("id", "N/A"),
+                        "Contact Name": release.get("parties", [{}])[0].get("contactPoint", {}).get("name", "N/A"),
+                        "Contact Email": release.get("parties", [{}])[0].get("contactPoint", {}).get("email", "N/A"),
+
+                        }
+                        notice_results.append(notice_fields)
+
+                        if len(lots) > 1:  # Only create lot entries for multiple lots
+                            for idx, lot in enumerate(lots, 1):
+                                lot_fields = { 
+                                    "OCID": release.get("ocid", "N/A"),
+                                    "Notice Type": notice_type,
+                                    "Is Update": is_update,
+                                    "Lot Number": idx,
+                                    "Lot Title": lot.get("title", "N/A"),
+                                    "Lot Description": lot.get("description", "N/A"),
+                                    "Lot Value ex VAT": lot.get("value", {}).get("amount", "N/A"),
+                                    "Lot Value inc VAT": lot.get("value", {}).get("amountGross", "N/A"),
+                                    "Lot Currency": lot.get("value", {}).get("currency", "N/A"),
+                                    "Lot Start Date": lot.get("contractPeriod", {}).get("startDate", "N/A"),
+                                    "Lot End Date": lot.get("contractPeriod", {}).get("endDate", "N/A"),
+                                    "SME Suitable": lot.get("suitability", {}).get("sme", False),
+                                    "VCSE Suitable": lot.get("suitability", {}).get("vcse", False),
+                                    "Award Criteria": (
+                                        lot.get("awardCriteria", {}).get("description", "N/A")
+                                        if not lot.get("awardCriteria", {}).get("criteria")
+                                        else "Refer to notice for detailed weightings"
+                                        ),
+                                    "CPV Code": (
+                                        next(
+                                            (item.get("additionalClassifications", [{}])[0].get("id", "N/A")
+                                            for item in release.get("tender", {}).get("items", [])
+                                            if item.get("relatedLot") == lot.get("id")),
+                                            "N/A"
+                                        )
+                                    ),
+                                }
+                                lot_results.append(lot_fields)
+
+
+                elif notice_type in ["UK4"]:
+                # Extract notice fields
+                    notice_fields = {
+                        "OCID": release.get("ocid", "N/A"),
+                        "Notice Type": notice_type,
+                        "Is Update": is_update,
+                        "Published Date": release.get("date", "N/A"),
+                        "Notice ID": release.get("id", "N/A"),
+                        "Reference": release.get("tender", {}).get("id", "N/A"),
+                        "Notice Title": release.get("tender", {}).get("title", "N/A"),
+                        "Notice Description": release.get("tender", {}).get("description", "N/A"),
+                        "Value ex VAT": release.get("tender", {}).get("value", {}).get("amount", "N/A"),
+                        "Value inc VAT": release.get("tender", {}).get("value", {}).get("amountGross", "N/A"),
+                        "Currency": release.get("tender", {}).get("value", {}).get("currency", "N/A"),
+                        "Threshold": "Above the relevant threshold" if release.get("tender", {}).get("aboveThreshold", False) else "Below the relevant threshold",
+                        "Contract Start Date": release.get("tender", {}).get("contractPeriod", {}).get("startDate", "N/A"),
+                        "Contract End Date": release.get("tender", {}).get("contractPeriod", {}).get("endDate", "N/A"),
+                        "Renewal": release.get("tender", {}).get("renewal", {}).get("description", "N/A"),
+                        "Options": release.get("tender", {}).get("options", {}).get("description", "N/A"),
+                        "Main Category": release.get("tender", {}).get("mainProcurementCategory", "N/A"),
+                        "CPV Code": release.get("tender", {}).get("items", [{}])[0].get("additionalClassifications", [{}])[0].get("id", "N/A") if len(lots) == 1
+                        else "See lots sheet for CPV codes",
+                        "Particular Suitability": (
+                            ", ".join(filter(None, [
+                                "SME" if release.get("tender", {}).get("lots", [{}])[0].get("suitability", {}).get("sme") else None,
+                                "VCSE" if release.get("tender", {}).get("lots", [{}])[0].get("suitability", {}).get("vcse") else None
+                            ])) or "N/A"
+                        ),
+                        "Submission Deadline": release.get("tender", {}).get("tenderPeriod", {}).get("endDate", "N/A"),
+                        "Submission Method": release.get("tender", {}).get("submissionMethodDetails", "N/A"),
+                        "Enquiry Deadline": release.get("tender", {}).get("enquiryPeriod", {}).get("endDate", "N/A"),
+                        "Estimated Award Date": release.get("tender", {}).get("awardPeriod", {}).get("endDate", "N/A"),
+                        "Award Criteria": (
+                            "Detailed in lots sheet" if len(lots) > 1
+                            else (
+                                release.get("tender", {}).get("lots", [{}])[0].get("awardCriteria", {}).get("description", "N/A")
+                                if not release.get("tender", {}).get("lots", [{}])[0].get("awardCriteria", {}).get("criteria")
+                                else "Refer to notice for detailed weightings"
+                            )
+                        ),
+                        "Framework Agreement": (
+                            "Closed Framework" if release.get("tender", {}).get("techniques", {}).get("type") == "closed"
+                            else "Open Framework" if release.get("tender", {}).get("techniques", {}).get("type") == "open"
+                            else "N/A"
+                        ), 
+                        "Call off method": (
+                            "With competition" if release.get("tender", {}).get("techniques", {}).get("frameworkAgreement", {}).get("method") == "withReopeningCompetition"
+                            else "Without competition" if release.get("tender", {}).get("techniques", {}).get("frameworkAgreement", {}).get("method") == "withoutReopeningCompetition"
+                            else "Either with or without competition" if release.get("tender", {}).get("techniques", {}).get("frameworkAgreement", {}).get("method") == "withAndWithoutReopeningCompetition"
+                            else "N/A"
+                        ),
+                        "Procedure Type": release.get("tender", {}).get("procurementMethodDetails", "N/A"),
+                        "Contracting Authority": release.get("buyer", {}).get("name", "N/A"),
+                        "PPON": release.get("buyer", {}).get("id", "N/A"),
+                        "Contact Name": release.get("parties", [{}])[0].get("contactPoint", {}).get("name", "N/A"),
+                        "Contact Email": release.get("parties", [{}])[0].get("contactPoint", {}).get("email", "N/A"),
                     }
-                    results.append(tender_info)
-                except (KeyError, IndexError) as e:
-                    print(f"Error extracting data for OCID: {ocid} - {e}")
+                    
+                    notice_results.append(notice_fields)
+                    
+                    
+                    if len(lots) > 1:  # Only create lot entries for multiple lots
+                        for idx, lot in enumerate(lots, 1):
+                            lot_fields = { 
+                                "OCID": release.get("ocid", "N/A"),
+                                "Notice Type": notice_type,
+                                "Is Update": is_update,
+                                "Lot Number": idx,
+                                "Lot Title": lot.get("title", "N/A"),
+                                "Lot Description": lot.get("description", "N/A"),
+                                "Lot Value ex VAT": lot.get("value", {}).get("amount", "N/A"),
+                                "Lot Value inc VAT": lot.get("value", {}).get("amountGross", "N/A"),
+                                "Lot Currency": lot.get("value", {}).get("currency", "N/A"),
+                                "Lot Start Date": lot.get("contractPeriod", {}).get("startDate", "N/A"),
+                                "Lot End Date": lot.get("contractPeriod", {}).get("endDate", "N/A"),
+                                "SME Suitable": lot.get("suitability", {}).get("sme", False),
+                                "VCSE Suitable": lot.get("suitability", {}).get("vcse", False),
+                                "Award Criteria": (
+                                    lot.get("awardCriteria", {}).get("description", "N/A")
+                                    if not lot.get("awardCriteria", {}).get("criteria")
+                                    else "Refer to notice for detailed weightings"
+                                    ),
+                                "CPV Code": (
+                                        next(
+                                        (item.get("additionalClassifications", [{}])[0].get("id", "N/A")
+                                        for item in release.get("tender", {}).get("items", [])
+                                        if item.get("relatedLot") == lot.get("id")),
+                                        "N/A"
+                                    )
+                                ),
+                            }
+                            lot_results.append(lot_fields)
+            
+                    
+                
+                
+                elif notice_type in ["UK5", "UK6", "UK7"]:
+                    # First try to get documents from contracts, if not found try awards
+                    # Extract notice fields
+                    notice_fields = {
+                    "OCID": release.get("ocid", "N/A"),
+                    "Notice Type": notice_type,
+                    "Is Update": is_update,
+                    "Published Date": release.get("date", "N/A"),
+                    "Notice ID": release.get("id", "N/A"),
+                    "Reference": release.get("tender", {}).get("id", "N/A"),
+                    "Notice Title": release.get("tender", {}).get("title", "N/A"),
+                    "Notice Description": release.get("tender", {}).get("description", "N/A"),
+                    "Awarded Amount ex VAT": (
+                        release.get("contracts", [{}])[0].get("value", {}).get("amount", "N/A") 
+                        if notice_type == "UK7"
+                        else release.get("awards", [{}])[0].get("value", {}).get("amount", "N/A")
+                    ),
+                    "Awarded Amount inc VAT": (
+                        release.get("contracts", [{}])[0].get("value", {}).get("amountGross", "N/A")
+                        if notice_type == "UK7"
+                        else release.get("awards", [{}])[0].get("value", {}).get("amountGross", "N/A")
+                    ),
+                    "Currency": (
+                        release.get("contracts", [{}])[0].get("value", {}).get("currency", "N/A")
+                        if notice_type == "UK7"
+                        else release.get("awards", [{}])[0].get("value", {}).get("currency", "N/A")
+                    ),
+                    "Threshold": (
+                        "Above the relevant threshold" 
+                        if (notice_type == "UK7" and release.get("contracts", [{}])[0].get("aboveThreshold", False))
+                        or (notice_type in ["UK5", "UK6"] and release.get("awards", [{}])[0].get("aboveThreshold", False))
+                        else "Below the relevant threshold"
+                    ),
+                    "Earliest date the contract will be signed": (
+                        release.get("awards", [{}])[0].get("milestones", [{}])[0].get("dueDate", "N/A") 
+                        if release.get("awards", [{}])[0].get("milestones", [{}])[0].get("type") == "futureSignatureDate" 
+                        else "N/A"
+                    ),
+                    "Contract Start Date": (
+                        release.get("contracts", [{}])[0].get("period", {}).get("startDate", "N/A")
+                        if notice_type == "UK7"
+                        else release.get("awards", [{}])[0].get("contractPeriod", {}).get("startDate", "N/A")
+                    ),
+                    "Contract End Date": (
+                        release.get("contracts", [{}])[0].get("period", {}).get("endDate", "N/A")
+                        if notice_type == "UK7"
+                        else release.get("awards", [{}])[0].get("contractPeriod", {}).get("endDate", "N/A")
+                    ),
+                    "Suppliers": (
+                        ", ".join([supplier.get("name", "N/A") for supplier in release.get("awards", [{}])[0].get("suppliers", [])])
+                    ),
+                    "Supplier ID": (
+                        ", ".join([supplier.get("id", "N/A") for supplier in release.get("awards", [{}])[0].get("suppliers", [])])
+            ),
+                    "Main Category": (
+                        "See awards sheet" 
+                        if notice_type in ["UK6", "UK7"]
+                        else release.get("awards", [{}])[0].get("mainProcurementCategory", "N/A")
+                    ),
+                    "CPV Code": release.get("tender", {}).get("items", [{}])[0].get("additionalClassifications", [{}])[0].get("id", "N/A") if len(lots) == 1
+                        else "See lots sheet for CPV codes",
+                    "Submission Deadline": release.get("tender", {}).get("tenderPeriod", {}).get("endDate", "N/A"),
+                    "Procurement Method": release.get("tender", {}).get("procurementMethodDetails", "N/A"),
+                    # To check if always the case. What if no bids for example
+                    "Number of Tenders received": next(
+                        (stat.get("value", "N/A") 
+                        for stat in release.get("bids", {}).get("statistics", [])
+                        if stat.get("measure") == "bids"),
+                        "N/A"
+                    ),
+                    "Number of Tenders assessed": next(
+                        (stat.get("value", "N/A") 
+                        for stat in release.get("bids", {}).get("statistics", [])
+                        if stat.get("measure") == "finalStageBids"),
+                        "N/A"
+                    ),
+                    "Award decision date": release.get("awards", [{}])[0].get("date", "N/A"),
+                    "Date assessment summaries sent": release.get("awards", [{}])[0].get("assessmentSummariesDateSent", "N/A"),
+                    "Contracting Authority": release.get("buyer", {}).get("name", "N/A"),
+                    "PPON": release.get("buyer", {}).get("id", "N/A"),
+                    "Contact Name": release.get("parties", [{}])[0].get("contactPoint", {}).get("name", "N/A"),
+                    "Contact Email": release.get("parties", [{}])[0].get("contactPoint", {}).get("email", "N/A"),
+                    }
+                    notice_results.append(notice_fields)
+
+                    # Check lots info for UK6 notices and data pull through
+                    if len(lots) > 1:  # Only create lot entries for multiple lots
+                        for idx, lot in enumerate(lots, 1):
+                            lot_fields = { 
+                                "OCID": release.get("ocid", "N/A"),
+                                "Notice Type": notice_type,
+                                "Is Update": is_update,
+                                "Lot Number": idx,
+                                "Lot Title": lot.get("title", "N/A"),
+                                "Lot Description": lot.get("description", "N/A"),
+                                "Lot Value ex VAT": lot.get("value", {}).get("amount", "N/A"),
+                                "Lot Value inc VAT": lot.get("value", {}).get("amountGross", "N/A"),
+                                "Lot Currency": lot.get("value", {}).get("currency", "N/A"),
+                                "Lot Start Date": lot.get("contractPeriod", {}).get("startDate", "N/A"),
+                                "Lot End Date": lot.get("contractPeriod", {}).get("endDate", "N/A"),
+                                "SME Suitable": lot.get("suitability", {}).get("sme", False),
+                                "VCSE Suitable": lot.get("suitability", {}).get("vcse", False),
+                                "Award Criteria": (
+                                    lot.get("awardCriteria", {}).get("description", "N/A")
+                                    if not lot.get("awardCriteria", {}).get("criteria")
+                                    else "Refer to notice for detailed weightings"
+                                    ),
+                                "CPV Code": (
+                                        next(
+                                        (item.get("additionalClassifications", [{}])[0].get("id", "N/A")
+                                        for item in release.get("tender", {}).get("items", [])
+                                        if item.get("relatedLot") == lot.get("id")),
+                                        "N/A"
+                                    )
+                                ),
+                            }
+                            lot_results.append(lot_fields)
+
+                #Separate UK 6 notices out - fields differ from other awards
+                    if notice_type in ["UK6", "UK7"]:
+                        awards = release.get("awards", [])
+                        for award in awards:
+                            award_fields = {
+                                "OCID": release.get("ocid", "N/A"),
+                                "Notice Type": notice_type,
+                                "Notice ID": release.get("id", "N/A"),
+                                "Is Update": is_update,
+                                "Contract Title": award.get("title", "N/A"),
+                                # For UK7, try to get value from contract first, then fall back to award
+                                "Value ex VAT": (
+                                    release.get("contracts", [{}])[0].get("value", {}).get("amount", "N/A") 
+                                    if notice_type == "UK7" 
+                                    else award.get("value", {}).get("amount", "N/A")
+                                ),
+                                "Value inc VAT": (
+                                    release.get("contracts", [{}])[0].get("value", {}).get("amountGross", "N/A")
+                                    if notice_type == "UK7"
+                                    else award.get("value", {}).get("amountGross", "N/A")
+                                ),
+                                "Currency": award.get("value", {}).get("currency", "N/A"),
+                                "Suppliers": ", ".join([supplier.get("name", "N/A") for supplier in award.get("suppliers", [])]),
+                                "Contract Start Date": (
+                                    release.get("contracts", [{}])[0].get("period", {}).get("startDate", "N/A")
+                                    if notice_type == "UK7"
+                                    else award.get("contractPeriod", {}).get("startDate", "N/A")
+                                ),
+                                "Contract End Date": (
+                                    release.get("contracts", [{}])[0].get("period", {}).get("endDate", "N/A")
+                                    if notice_type == "UK7"
+                                    else award.get("contractPeriod", {}).get("endDate", "N/A")
+                                ),
+                                "Main Category": award.get("mainProcurementCategory", release.get("tender", {}).get("mainProcurementCategory", "N/A")),
+                                "CPV Code": next(
+                                    (item.get("additionalClassifications", [{}])[0].get("id", "N/A")
+                                    for item in award.get("items", [])
+                                    if item.get("additionalClassifications")),
+                                    "N/A"
+                                )
+                            }
+                            award_results.append(award_fields)
+
+                )
+
             elif response.status_code == 404:
                 print(f"OCID {ocid} not found. Skipping...")
             else:
                 print(f"Error fetching OCID {ocid}, Status Code: {response.status_code}")
 
-        # Write data back to Google Sheets
-        results_sheet = sh.worksheet("Results")
-
-        # Convert results to a DataFrame
-        df = pd.DataFrame(results)
+        # Convert results to DataFrames
+        notices_df = pd.DataFrame(notice_results)
+        lots_df = pd.DataFrame(lot_results)
+        awards_df = pd.DataFrame(award_results)
+        
+        # Update Google Sheets with results
+        notices_sheet = sh.worksheet("Notices")
+        lots_sheet = sh.worksheet("Lots")
+        awards_sheet = sh.worksheet("Awards")
 
         # Clean data - replace None, empty lists, and other problematic values
         def clean_value(val):
@@ -233,25 +465,24 @@ def fetch_and_process_data():
                 return str(val)
             return val
 
-        # Apply cleaning to all DataFrame cells
-        for col in df.columns:
-            df[col] = df[col].apply(clean_value)
+        # Clean DataFrames
+        for df in [notices_df, lots_df, awards_df]:
+            for col in df.columns:
+                df[col] = df[col].apply(clean_value)
 
-        # Clear existing data and update the sheet
-        results_sheet.clear()
-        results_sheet.update([df.columns.values.tolist()] + df.values.tolist())
+        # Update sheets without clearing first
+        if not notices_df.empty:
+            notices_sheet.update('A1', [notices_df.columns.values.tolist()] + notices_df.values.tolist(), value_input_option='RAW')
+        if not lots_df.empty:
+            lots_sheet.update('A1', [lots_df.columns.values.tolist()] + lots_df.values.tolist(), value_input_option='RAW')
+        if not awards_df.empty:
+            awards_sheet.update('A1', [awards_df.columns.values.tolist()] + awards_df.values.tolist(), value_input_option='RAW')
 
         last_run_time = time.strftime("%Y-%m-%d %H:%M:%S")
         print(f"Data successfully written to Google Sheets at {last_run_time}!")
-        
         return True, f"Data successfully processed at {last_run_time}"
-    except Exception as e:
-        error_message = f"Error processing data: {str(e)}"
-        print(error_message)
-        return False, error_message
-    finally:
-        # Reset flag when job is done
-        job_running = False
+        
+        
 
 # Route for manual triggering of the data fetch
 @app.route('/run')
