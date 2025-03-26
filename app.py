@@ -11,6 +11,8 @@ from threading import Thread
 import sys
 import logging
 from datetime import datetime
+import math
+import numpy as np
 
 
 # Configure logging
@@ -563,12 +565,18 @@ def fetch_and_process_data():
                 if not val:  # Empty list or dict
                     return ""
                 return str(val)
+            if isinstance(val, float):
+                if not math.isfinite(val):  # Check for inf or nan
+                    return ""
             return val
 
         # Clean DataFrames
         for df in [notices_df, lots_df, awards_df]:
-            for col in df.columns:
-                df[col] = df[col].apply(clean_value)
+            if not df.empty:
+                for col in df.columns:
+                    df[col] = df[col].apply(clean_value)
+                    # Replace any remaining problematic values
+                    df[col] = df[col].replace([np.inf, -np.inf, np.nan], '')
 
         notices_sheet = sh.worksheet("Notices")
         lots_sheet = sh.worksheet("Lots")
