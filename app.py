@@ -74,7 +74,7 @@ def update_last_fetch_date(fetch_time):
         logger.info(f"Attempting to update last fetch date to {fetch_time}")
         sh = gc.open(SPREADSHEET_NAME)
         metadata_sheet = sh.worksheet("Metadata")
-        metadata_sheet.update('B1', fetch_time)
+        metadata_sheet.update('B1', [[fetch_time]])
         logger.info(f"Successfully updated last fetch date to {fetch_time}")
     except Exception as e:
         logger.error(f"Error updating last fetch date: {str(e)}")
@@ -301,6 +301,10 @@ def fetch_and_process_data():
 
 
             elif notice_type in ["UK4"]:
+                logger.debug(f"UK4 dates for {release.get('ocid')}: " +
+                f"Start={release.get('tender', {}).get('lots', [{}])[0].get('contractPeriod', {}).get('startDate', 'N/A')}, " +
+                f"End={release.get('tender', {}).get('lots', [{}])[0].get('contractPeriod', {}).get('endDate', 'N/A')}")
+                
                 # Extract notice fields
                 notice_fields = {
                     "OCID": release.get("ocid", "N/A"),
