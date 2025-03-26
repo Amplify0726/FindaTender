@@ -10,7 +10,7 @@ import time
 from threading import Thread
 import sys
 import logging
-from datetime import datetime, time
+from datetime import datetime
 
 
 # Configure logging
