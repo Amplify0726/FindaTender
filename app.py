@@ -10,7 +10,7 @@ import time
 from threading import Thread
 import sys
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 import math
 import numpy as np
 
@@ -172,9 +172,9 @@ def update_closed_unawarded_notices():
         latest_uk4 = uk4_notices.sort_values('Published Date').groupby('OCID').last()
 
         # Filter for closed tenders (submission deadline < current date)
-        current_date = datetime.now()
+        current_date = datetime.now(timezone.utc)
         closed_tenders = latest_uk4[
-            pd.to_datetime(latest_uk4['Submission Deadline']) < current_date
+            pd.to_datetime(latest_uk4['Submission Deadline'], utc=True) < current_date
         ]
 
         # Get OCIDs with award notices
@@ -188,7 +188,13 @@ def update_closed_unawarded_notices():
             ['OCID', 'Notice Title', 'Submission Deadline', 'Published Date', 
              'Value ex VAT', 'Contracting Authority', 'Contact Name', 'Contact Email']
         ]
-        closed_unawarded['Date Added to Report'] = current_date.strftime("%Y-%m-%dT%H:%M:%S")
+        closed_unawarded['Date Added to Report'] = current_date.strftime("%Y-%m-%dT%H:%M:%S%z")
+        closed_unawarded['Days Since Closed'] = (
+            current_date - pd.to_datetime(closed_unawarded['Submission Deadline'], utc=True)
+        ).dt.days
+        closed_unawarded['Status'] = closed_unawarded['Days Since Closed'].apply(
+            lambda x: "Recently Closed" if x <= 30 else "Overdue Award Notice"
+        )
 
         # Update sheet
         if not closed_unawarded.empty:
