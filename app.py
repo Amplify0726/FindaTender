@@ -153,6 +153,62 @@ def get_or_create_worksheet(spreadsheet, name, rows=1000, cols=100):
         worksheet = spreadsheet.add_worksheet(name, rows, cols)
     return worksheet
 
+def update_closed_unawarded_notices():
+    try:
+        logger.info("Starting closed unawarded notices analysis...")
+        sh = gc.open(SPREADSHEET_NAME)
+        
+        # Get data from relevant sheets
+        tender_sheet = sh.worksheet("Tender_Notices")
+        award_notice_sheet = sh.worksheet("Award_Notices")
+        closed_sheet = sh.worksheet("Closed_Notices_Not_Awarded")
+
+        # Convert to dataframes
+        tender_df = pd.DataFrame(tender_sheet.get_all_records())
+        award_df = pd.DataFrame(award_notice_sheet.get_all_records())
+
+        # Get latest UK4 notice for each OCID (handling updates)
+        uk4_notices = tender_df[tender_df['Notice Type'] == 'UK4']
+        latest_uk4 = uk4_notices.sort_values('Published Date').groupby('OCID').last()
+
+        # Filter for closed tenders (submission deadline < current date)
+        current_date = datetime.now()
+        closed_tenders = latest_uk4[
+            pd.to_datetime(latest_uk4['Submission Deadline']) < current_date
+        ]
+
+        # Get OCIDs with award notices
+        awarded_ocids = set(award_df[award_df['Notice Type'].isin(['UK6', 'UK7'])]['OCID'])
+
+        # Filter for closed tenders without award notices
+        unawarded = closed_tenders[~closed_tenders.index.isin(awarded_ocids)]
+
+        # Prepare data for closed notices sheet
+        closed_unawarded = unawarded.reset_index()[
+            ['OCID', 'Notice Title', 'Submission Deadline', 'Published Date', 
+             'Value ex VAT', 'Contracting Authority', 'Contact Name', 'Contact Email']
+        ]
+        closed_unawarded['Date Added to Report'] = current_date.strftime("%Y-%m-%dT%H:%M:%S")
+
+        # Update sheet
+        if not closed_unawarded.empty:
+            logger.info(f"Found {len(closed_unawarded)} closed tenders without award notices")
+            # Clear existing data
+            closed_sheet.clear()
+            # Update with new data
+            closed_sheet.update('A1', [closed_unawarded.columns.values.tolist()] + 
+                                     closed_unawarded.values.tolist())
+            
+        else:
+            logger.info("No closed tenders without award notices found")
+
+        return True, "Closed unawarded notices updated successfully"
+    
+    except Exception as e:
+        logger.error(f"Error updating closed unawarded notices: {str(e)}")
+        return False, str(e)
+
+
 def fetch_and_process_data():
     global job_running, last_run_time
     
@@ -177,6 +233,7 @@ def fetch_and_process_data():
         award_notice_sheet = get_or_create_worksheet(sh, "Award_Notices")
         lots_sheet = get_or_create_worksheet(sh, "Lots")
         awards_sheet = get_or_create_worksheet(sh, "Awards")
+        closed_notices_not_awarded_sheet = get_or_create_worksheet(sh, "Closed_Notices_Not_Awarded")
 
         # Get releases from API
         releases = fetch_releases()
@@ -686,6 +743,15 @@ def health_check():
         "service": "find-a-tender-data-fetcher",
         "job_running": job_running,
         "last_run": last_run_time
+    })
+
+@app.route('/update-closed')
+def update_closed_notices():
+    thread = Thread(target=update_closed_unawarded_notices)
+    thread.start()
+    return jsonify({
+        "status": "started",
+        "message": "Started analyzing closed unawarded notices"
     })
 
 if __name__ == '__main__':
