@@ -174,7 +174,7 @@ def update_closed_unawarded_notices():
         # Filter for closed tenders (submission deadline < current date)
         current_date = datetime.now(timezone.utc)
         closed_tenders = latest_uk4[
-            pd.to_datetime(latest_uk4['Submission Deadline'], utc=True) < current_date
+            pd.to_datetime(latest_uk4['Submission Deadline'], format='%Y-%m-%dT%H:%M:%S%z', utc=True) < current_date
         ]
 
         # Get OCIDs with award notices
