@@ -161,7 +161,7 @@ def update_closed_unawarded_notices():
         # Get data from relevant sheets
         tender_sheet = sh.worksheet("Tender_Notices")
         award_notice_sheet = sh.worksheet("Award_Notices")
-        closed_sheet = sh.worksheet("Closed_Notices_Not_Awarded")
+        closed_sheet = get_or_create_worksheet(sh, "Closed_Notices_Not_Awarded")
 
         # Convert to dataframes
         tender_df = pd.DataFrame(tender_sheet.get_all_records())
@@ -233,7 +233,7 @@ def fetch_and_process_data():
         award_notice_sheet = get_or_create_worksheet(sh, "Award_Notices")
         lots_sheet = get_or_create_worksheet(sh, "Lots")
         awards_sheet = get_or_create_worksheet(sh, "Awards")
-        closed_notices_not_awarded_sheet = get_or_create_worksheet(sh, "Closed_Notices_Not_Awarded")
+        
 
         # Get releases from API
         releases = fetch_releases()
