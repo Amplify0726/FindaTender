@@ -167,8 +167,18 @@ def update_closed_unawarded_notices():
         tender_df = pd.DataFrame(tender_sheet.get_all_records())
         award_df = pd.DataFrame(award_notice_sheet.get_all_records())
 
+        if tender_df.empty:
+            logger.info("No tender notices found")
+            return True, "No tender notices to analyze"
+
         # Get latest UK4 notice for each OCID (handling updates)
-        uk4_notices = tender_df[tender_df['Notice Type'] == 'UK4']
+        uk4_notices = tender_df[tender_df['Notice Type'] == 'UK4'].copy()
+        
+
+        if uk4_notices.empty:
+            logger.info("No UK4 notices found")
+            return True, "No UK4 notices to analyze"
+        
         latest_uk4 = uk4_notices.sort_values('Published Date').groupby('OCID').last()
 
         # Filter for closed tenders (submission deadline < current date)
@@ -176,6 +186,9 @@ def update_closed_unawarded_notices():
         closed_tenders = latest_uk4[
             pd.to_datetime(latest_uk4['Submission Deadline'], format='%Y-%m-%dT%H:%M:%S%z', utc=True) < current_date
         ]
+        if closed_tenders.empty:
+            logger.info("No closed tenders found")
+            return True, "No closed tenders to analyze"
 
         # Get OCIDs with award notices
         awarded_ocids = set(award_df[award_df['Notice Type'].isin(['UK6', 'UK7'])]['OCID'])
@@ -185,12 +198,12 @@ def update_closed_unawarded_notices():
 
         # Prepare data for closed notices sheet
         closed_unawarded = unawarded.reset_index()[
-            ['OCID', 'Notice Title', 'Submission Deadline', 'Published Date', 
+            ['OCID', 'Notice Type', 'Notice Title', 'Submission Deadline', 'Published Date', 
              'Value ex VAT', 'Contracting Authority', 'Contact Name', 'Contact Email']
         ]
         closed_unawarded['Date Added to Report'] = current_date.strftime("%Y-%m-%dT%H:%M:%S%z")
         closed_unawarded['Days Since Closed'] = (
-            current_date - pd.to_datetime(closed_unawarded['Submission Deadline'], utc=True)
+            current_date - pd.to_datetime(closed_unawarded['Submission Deadline'], format='%Y-%m-%dT%H:%M:%S%z', utc=True)
         ).dt.days
         closed_unawarded['Status'] = closed_unawarded['Days Since Closed'].apply(
             lambda x: "Recently Closed" if x <= 30 else "Overdue Award Notice"
@@ -204,7 +217,6 @@ def update_closed_unawarded_notices():
             # Update with new data
             closed_sheet.update('A1', [closed_unawarded.columns.values.tolist()] + 
                                      closed_unawarded.values.tolist())
-            
         else:
             logger.info("No closed tenders without award notices found")
 
