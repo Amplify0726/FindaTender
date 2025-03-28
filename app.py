@@ -190,11 +190,15 @@ def update_closed_unawarded_notices():
             logger.info("No closed tenders found")
             return True, "No closed tenders to analyze"
 
-        # Get OCIDs with award notices
-        awarded_ocids = set(award_df[award_df['Notice Type'].isin(['UK6', 'UK7'])]['OCID'])
-
-        # Filter for closed tenders without award notices
-        unawarded = closed_tenders[~closed_tenders.index.isin(awarded_ocids)]
+        # If award_df is empty, all closed tenders are unawarded
+        if award_df.empty:
+            unawarded = closed_tenders
+            logger.info("No award notices found - treating all closed tenders as unawarded")
+        else:
+            # Get OCIDs with award notices
+            awarded_ocids = set(award_df[award_df['Notice Type'].isin(['UK6', 'UK7'])]['OCID'])
+            # Filter for closed tenders without award notices
+            unawarded = closed_tenders[~closed_tenders.index.isin(awarded_ocids)]
 
         # Prepare data for closed notices sheet
         closed_unawarded = unawarded.reset_index()[
