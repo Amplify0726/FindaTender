@@ -219,8 +219,8 @@ def update_closed_unawarded_notices():
             # Clear existing data
             closed_sheet.clear()
             # Update with new data
-            closed_sheet.update('A1', [closed_unawarded.columns.values.tolist()] + 
-                                     closed_unawarded.values.tolist())
+            values = [closed_unawarded.columns.values.tolist()] + closed_unawarded.values.tolist()
+            closed_sheet.update(values=values, range_name='A1')
         else:
             logger.info("No closed tenders without award notices found")
 
