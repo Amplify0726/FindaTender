@@ -104,6 +104,18 @@ def fetch_releases():
             response = requests.get(base_url, params=params, timeout=30)
             response.raise_for_status()  # Raises an error for bad status codes
             
+            # Add debug logging for response
+            logger.debug(f"Response status code: {response.status_code}")
+            logger.debug(f"Response headers: {response.headers}")
+            
+            try:
+                data = response.json()
+            except json.JSONDecodeError as e:
+                logger.error(f"JSON decode error on page {page_count}")
+                logger.error(f"Error details: {str(e)}")
+                logger.error(f"Response text snippet: {response.text[:500]}...")  # First 500 chars
+                break
+                
         except requests.Timeout:
             logger.error(f"Request timed out on page {page_count}")
             break
