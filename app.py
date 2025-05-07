@@ -100,6 +100,11 @@ def fetch_releases():
         logger.info(f"Fetching page {page_count} (total records so far: {len(all_releases)})")
         
         try:
+            headers = {
+                'Accept': 'application/json',
+                'User-Agent': 'FindaTenderDataFetcher/1.0'
+            }
+
             # Add timeout to prevent hanging
             response = requests.get(base_url, params=params, timeout=30)
             response.raise_for_status()  # Raises an error for bad status codes
@@ -113,8 +118,15 @@ def fetch_releases():
             except json.JSONDecodeError as e:
                 logger.error(f"JSON decode error on page {page_count}")
                 logger.error(f"Error details: {str(e)}")
-                logger.error(f"Response text snippet: {response.text[:500]}...")  # First 500 chars
+                logger.error(f"Response text snippet: {response.text[:1000]}...")  # First 1000 chars
+                logger.error(f"Response content type: {response.headers.get('content-type', 'unknown')}")
                 break
+
+            # Save problematic response to file for debugging
+            error_file = f"json_error_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+            with open(error_file, 'w') as f:
+                f.write(response.text)
+            logger.error(f"Full response saved to {error_file}")
                 
         except requests.Timeout:
             logger.error(f"Request timed out on page {page_count}")
