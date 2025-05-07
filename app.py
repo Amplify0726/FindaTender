@@ -89,6 +89,8 @@ def fetch_releases():
     from_date = get_last_fetch_date()
     to_date = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     
+    logger.info(f"Fetching releases from {from_date} to {to_date}")
+
     params = {
         'updatedFrom': from_date,
         'updatedTo': to_date,
@@ -100,18 +102,9 @@ def fetch_releases():
         logger.info(f"Fetching page {page_count} (total records so far: {len(all_releases)})")
         
         try:
-            headers = {
-                'Accept': 'application/json',
-                'User-Agent': 'FindaTenderDataFetcher/1.0'
-            }
-
             # Add timeout to prevent hanging
             response = requests.get(base_url, params=params, timeout=30)
             response.raise_for_status()  # Raises an error for bad status codes
-            
-            # Add debug logging for response
-            logger.debug(f"Response status code: {response.status_code}")
-            logger.debug(f"Response headers: {response.headers}")
             
             try:
                 data = response.json()
@@ -122,48 +115,42 @@ def fetch_releases():
                 logger.error(f"Response content type: {response.headers.get('content-type', 'unknown')}")
                 break
 
-            # Save problematic response to file for debugging
-            error_file = f"json_error_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-            with open(error_file, 'w') as f:
-                f.write(response.text)
-            logger.error(f"Full response saved to {error_file}")
+            releases = data.get('releases', [])
+            if not releases:
+                logger.info("No more releases found")
+                break
                 
+            # Filter for your organization
+            org_releases = [r for r in releases if r.get("buyer", {}).get("id") == MY_ORG_ID]
+            logger.info(f"Page {page_count}: Found {len(org_releases)} releases for your organization out of {len(releases)} total")
+            all_releases.extend(org_releases)
+            
+        
+            # Check for next page
+            next_url = data.get('links', {}).get('next')
+            if not next_url:
+                logger.info("No more pages available")
+                break
+            
+            # Extract cursor from next_url for pagination
+            parsed = urlparse(next_url)
+            cursor = parse_qs(parsed.query).get('cursor', [None])[0]
+            if not cursor:
+                logger.info("No cursor found in next URL")
+                break
+            
+            params['cursor'] = cursor
+
+            # Add a small delay between requests to be nice to the API
+            time.sleep(1)
+
         except requests.Timeout:
             logger.error(f"Request timed out on page {page_count}")
             break
         except requests.RequestException as e:
             logger.error(f"Request failed on page {page_count}: {str(e)}")
             break
-            
-        data = response.json()
-        releases = data.get('releases', [])
-
-        if not releases:
-            logger.info("No more releases found")
-            break
-        
-        # Filter for your organization
-        org_releases = [r for r in releases if r.get("buyer", {}).get("id") == MY_ORG_ID]
-        logger.info(f"Page {page_count}: Found {len(org_releases)} releases for your organization out of {len(releases)} total")
-        all_releases.extend(org_releases)
-        
-        # Check for next page
-        next_url = data.get('links', {}).get('next')
-        if not next_url:
-            logger.info("No more pages available")
-            break
-            
-        # Extract cursor from next_url for pagination
-        parsed = urlparse(next_url)
-        cursor = parse_qs(parsed.query).get('cursor', [None])[0]
-        if not cursor:
-            logger.info("No cursor found in next URL")
-            break
-            
-        params['cursor'] = cursor
-
-        # Add a small delay between requests to be nice to the API
-        time.sleep(1)
+    
     logger.info(f"Completed fetch: Found {len(all_releases)} total releases for your organization")
     return all_releases
 
