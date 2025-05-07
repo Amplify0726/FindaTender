@@ -105,14 +105,21 @@ def fetch_releases():
             # Add timeout to prevent hanging
             response = requests.get(base_url, params=params, timeout=30)
             response.raise_for_status()  # Raises an error for bad status codes
+
+            # Pre-process the response to fix invalid number formatting
+            fixed_json = response.text.replace('"amountGross": 00000', '"amountGross": 0')
+            fixed_json = fixed_json.replace('"amount": 00000', '"amount": 0')
             
             try:
-                data = response.json()
+                data = json.loads(fixed_json)
             except json.JSONDecodeError as e:
                 logger.error(f"JSON decode error on page {page_count}")
                 logger.error(f"Error details: {str(e)}")
                 logger.error(f"Response text snippet: {response.text[:1000]}...")  # First 1000 chars
                 logger.error(f"Response content type: {response.headers.get('content-type', 'unknown')}")
+                start = max(0, e.pos - 100)
+                end = min(len(response.text), e.pos + 100)
+                logger.error(response.text[start:end])
                 break
 
             releases = data.get('releases', [])
