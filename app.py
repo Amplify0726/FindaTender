@@ -107,8 +107,9 @@ def fetch_releases():
             response.raise_for_status()  # Raises an error for bad status codes
 
             # Pre-process the response to fix invalid number formatting
-            fixed_json = response.text.replace('"amountGross": 00000', '"amountGross": 0')
-            fixed_json = fixed_json.replace('"amount": 00000', '"amount": 0')
+            fixed_json = re.sub(r'"(amount|amountGross|value)": 0+([1-9]\d*)', r'"\1": \2', response.text)
+            # Handle case of all zeros
+            fixed_json = re.sub(r'"(amount|amountGross|value)": 0+\b', r'"\1": 0', fixed_json)
             
             try:
                 data = json.loads(fixed_json)
