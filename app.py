@@ -90,8 +90,8 @@ def fetch_releases():
     to_date = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     
     params = {
-        'publishedFrom': from_date,
-        'publishedTo': to_date,
+        'updatedFrom': from_date,
+        'updatedTo': to_date,
         'limit': 100
     }
     
