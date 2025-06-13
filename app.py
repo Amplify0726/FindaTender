@@ -319,6 +319,16 @@ def fetch_and_process_data():
                 continue
 
             notice_type = documents[-1].get("noticeType")
+
+            awards = release.get("awards", [])
+            if awards:
+                # If there is an awards section then:
+                # - For UK4, you wouldn't expect any awards.
+                # - For UK12, there should be awards.
+                # If any award has a status of 'cancelled', treat it as UK12:
+                if any(award.get("status", "").lower() == "cancelled" for award in awards):
+                    notice_type = tender_docs[-1].get("noticeType")
+
             lots = release.get("tender", {}).get("lots", [])
             is_update = any('update' in tag.lower() for tag in release.get('tag', []))
 
@@ -706,7 +716,7 @@ def fetch_and_process_data():
             return val
 
         # Clean DataFrames
-        for df in [planning_df, tender_df, award_df, lots_df, awards_df]:
+        for df in [planning_df, tender_df, award_df, lots_df, awards_df, procurement_terminations_df]:
             if not df.empty:
                 for col in df.columns:
                     df[col] = df[col].apply(clean_value)
