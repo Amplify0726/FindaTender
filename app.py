@@ -181,11 +181,13 @@ def update_closed_unawarded_notices():
         # Get data from relevant sheets
         tender_sheet = sh.worksheet("Tender_Notices")
         award_notice_sheet = sh.worksheet("Award_Notices")
+        procurement_terminations_sheet = sh.worksheet("Procurement_Terminations")
         closed_sheet = get_or_create_worksheet(sh, "Closed_Notices_Not_Awarded")
 
         # Convert to dataframes
         tender_df = pd.DataFrame(tender_sheet.get_all_records())
         award_df = pd.DataFrame(award_notice_sheet.get_all_records())
+        procurement_terminations_df = pd.DataFrame(procurement_terminations_sheet.get_all_records())
 
         if tender_df.empty:
             logger.info("No tender notices found")
@@ -206,6 +208,12 @@ def update_closed_unawarded_notices():
         closed_tenders = latest_uk4[
             pd.to_datetime(latest_uk4['Submission Deadline'], format='%Y-%m-%dT%H:%M:%S%z', utc=True) < current_date
         ]
+        if not procurement_terminations_df.empty and 'OCID' in procurement_terminations_df.columns:
+            terminated_ocids = set(procurement_terminations_df['OCID'].dropna())
+            # Exclude any closed tenders whose OCID is in terminated_ocids
+            closed_tenders = closed_tenders[~closed_tenders.index.isin(terminated_ocids)]
+            logger.info(f"Excluded {len(closed_tenders[closed_tenders.index.isin(terminated_ocids)])} closed tenders from terminated procurements")
+
         if closed_tenders.empty:
             logger.info("No closed tenders found")
             return True, "No closed tenders to analyze"
@@ -275,6 +283,7 @@ def fetch_and_process_data():
         award_notice_sheet = get_or_create_worksheet(sh, "Award_Notices")
         lots_sheet = get_or_create_worksheet(sh, "Lots")
         awards_sheet = get_or_create_worksheet(sh, "Awards")
+        procurement_terminations_sheet = get_or_create_worksheet(sh, "Procurement_Terminations")
         
 
         # Get releases from API
@@ -287,6 +296,7 @@ def fetch_and_process_data():
         award_notice_results = []    # UK5-7
         lot_results = []
         award_results = []
+        procurement_termination_results = [] # UK12
 
 
         for release in releases:
@@ -294,6 +304,7 @@ def fetch_and_process_data():
             award_docs = release.get("awards", [])[0].get("documents", []) if release.get("awards") else []
             tender_docs = release.get("tender", {}).get("documents", [])
             planning_docs = release.get("planning", {}).get("documents", [])
+            
 
             # Get documents in priority order
             if contract_docs:
@@ -496,7 +507,18 @@ def fetch_and_process_data():
                         }
                         lot_results.append(lot_fields)
         
-                
+            elif notice_type in ["UK12"]:
+                notice_fields = {
+                    "OCID": release.get("ocid", "N/A"),
+                    "Notice Type": notice_type,
+                    "Is Update": is_update,
+                    "Published Date": release.get("date", "N/A"),
+                    "Notice ID": release.get("id", "N/A"),
+                    "Reference": release.get("tender", {}).get("id", "N/A"),
+                    "Notice Title": release.get("tender", {}).get("title", "N/A"),
+                    "Cancellation Reason": release.get("awards", [{}])[0].get("statusDetails", "N/A")
+                }
+                procurement_termination_results.append(notice_fields)
             
             
             elif notice_type in ["UK5", "UK6", "UK7"]:
@@ -668,6 +690,7 @@ def fetch_and_process_data():
         award_df = pd.DataFrame(award_results)
         lots_df = pd.DataFrame(lot_results)
         awards_df = pd.DataFrame(award_results)
+        procurement_terminations_df = pd.DataFrame(procurement_termination_results)
         
         # Clean data - replace None, empty lists, and other problematic values
         def clean_value(val):
@@ -736,6 +759,14 @@ def fetch_and_process_data():
                 award_notice_sheet.append_rows(award_df.values.tolist(), value_input_option='RAW')
             else:
                 award_notice_sheet.update('A1', [award_df.columns.values.tolist()] + award_df.values.tolist(), value_input_option='RAW')
+
+        if not procurement_terminations_df.empty:
+            logger.info("Appending to Procurement Terminations sheet...")
+            existing_data = procurement_terminations_sheet.get_all_values()
+            if len(existing_data) > 1:
+                procurement_terminations_sheet.append_rows(procurement_terminations_df.values.tolist(), value_input_option='RAW')
+            else:
+                procurement_terminations_sheet.update('A1', [procurement_terminations_df.columns.values.tolist()] + procurement_terminations_df.values.tolist(), value_input_option='RAW')
 
         current_time = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
         update_last_fetch_date(current_time)
