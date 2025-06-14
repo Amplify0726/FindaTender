@@ -108,9 +108,10 @@ def fetch_releases():
     all_releases = []
     page_count = 0
     base_url = "https://www.find-tender.service.gov.uk/api/1.0/ocdsReleasePackages"
+    global to_date
     
     from_date = get_last_fetch_date()
-    to_date = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    to_date = get_to_date()
     
     logger.info(f"Fetching releases from {from_date} to {to_date}")
 
@@ -806,10 +807,9 @@ def fetch_and_process_data():
             else:
                 procurement_terminations_sheet.update('A1', [procurement_terminations_df.columns.values.tolist()] + procurement_terminations_df.values.tolist(), value_input_option='RAW')
 
-        current_time = datetime.now(ZoneInfo("S" \
-        "Europe/London")).strftime("%Y-%m-%dT%H:%M:%S")
-        update_last_fetch_date(current_time)
-        logger.info(f"Updated last fetch date to {current_time}")
+        current_time = datetime.now(ZoneInfo("Europe/London")).strftime("%Y-%m-%dT%H:%M:%S")
+        update_last_fetch_date(to_date)
+        logger.info(f"Updated last fetch date to {to_date}")
 
         last_run_time = time.strftime("%Y-%m-%d %H:%M:%S")
         logger.info(f"Data successfully written to Google Sheets at {last_run_time}")
