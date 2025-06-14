@@ -130,7 +130,7 @@ def fetch_releases():
                 break
                 
             # Filter for your organization
-            org_releases = [r for r in releases if r.get("buyer", {}).get("id") == MY_ORG_ID]
+            org_releases = [r for r in releases if any(p.get("id") == MY_ORG_ID for p in r.get("parties", []))
             logger.info(f"Page {page_count}: Found {len(org_releases)} releases for your organization out of {len(releases)} total")
             all_releases.extend(org_releases)
             
