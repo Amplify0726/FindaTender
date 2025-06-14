@@ -658,6 +658,7 @@ def fetch_and_process_data():
                             "OCID": release.get("ocid", "N/A"),
                             "Notice Type": notice_type,
                             "Notice ID": release.get("id", "N/A"),
+                            "Published Date": release.get("date", "N/A"),
                             "Is Update": is_update,
                             "Contract Title": award.get("title", "N/A"),
                             # For UK7, try to get value from contract first, then fall back to award
@@ -698,7 +699,7 @@ def fetch_and_process_data():
         # Convert results to DataFrames
         planning_df = pd.DataFrame(planning_results)
         tender_df = pd.DataFrame(tender_results)
-        award_df = pd.DataFrame(award_results)
+        award_df = pd.DataFrame(award_notice_results)
         lots_df = pd.DataFrame(lot_results)
         awards_df = pd.DataFrame(award_results)
         procurement_terminations_df = pd.DataFrame(procurement_termination_results)
