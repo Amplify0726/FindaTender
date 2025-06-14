@@ -11,6 +11,7 @@ from threading import Thread
 import sys
 import logging
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 import math
 import numpy as np
 import re
@@ -61,13 +62,34 @@ def get_last_fetch_date():
         # Open spreadsheet first
         sh = gc.open(SPREADSHEET_NAME)
         metadata_sheet = sh.worksheet("Metadata")
+        last_fetch = metadata_sheet.cell(1, 2).value
+        return last_fetch if last_fetch else '2025-02-24T00:00:00'
     except gspread.WorksheetNotFound:
         logger.info("Creating Metadata worksheet...")
         sh = gc.open(SPREADSHEET_NAME)
         metadata_sheet = sh.add_worksheet("Metadata", 2, 2)
-        metadata_sheet.update('A1:B1', [['last_fetch_date', '2025-02-24T00:00:00']])
+        # Use UK time for default
+        default_date = datetime.now(ZoneInfo("Europe/London")).strftime("%Y-%m-%dT%H:%M:%S")
+        metadata_sheet.update('A1:B1', [['last_fetch_date', default_date]])
+        return default_date
     
-    return metadata_sheet.acell('B1').value
+
+def get_to_date():
+    """Get the to_date from metadata sheet B2, or current UTC time if blank/invalid"""
+    try:
+        sh = gc.open(SPREADSHEET_NAME)
+        metadata_sheet = sh.worksheet("Metadata")
+        to_date_cell = metadata_sheet.cell(2, 2).value
+        
+        if to_date_cell:
+            # Validate format by trying to parse it
+            datetime.strptime(to_date_cell, "%Y-%m-%dT%H:%M:%S")
+            return to_date_cell
+        
+        return datetime.now(ZoneInfo("Europe/London")).strftime("%Y-%m-%dT%H:%M:%S")
+    except (ValueError, Exception):
+        # Invalid format or other error - use current time
+        return datetime.now(ZoneInfo("Europe/London")).strftime("%Y-%m-%dT%H:%M:%S")
 
 def update_last_fetch_date(fetch_time):
     """Update the last successful fetch date"""
@@ -784,7 +806,8 @@ def fetch_and_process_data():
             else:
                 procurement_terminations_sheet.update('A1', [procurement_terminations_df.columns.values.tolist()] + procurement_terminations_df.values.tolist(), value_input_option='RAW')
 
-        current_time = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+        current_time = datetime.now(ZoneInfo("S" \
+        "Europe/London")).strftime("%Y-%m-%dT%H:%M:%S")
         update_last_fetch_date(current_time)
         logger.info(f"Updated last fetch date to {current_time}")
 
