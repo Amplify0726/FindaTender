@@ -130,7 +130,12 @@ def fetch_releases():
                 break
                 
             # Filter for your organization
-            org_releases = [r for r in releases if any(p.get("id") == MY_ORG_ID for p in r.get("parties", []))]
+            org_releases = [
+            r for r in releases 
+            if (r.get("buyer", {}).get("id") == MY_ORG_ID or 
+                (r.get("buyer", {}).get("id") is None and 
+                any(p.get("id") == MY_ORG_ID for p in r.get("parties", []))))
+            ]
             logger.info(f"Page {page_count}: Found {len(org_releases)} releases for your organization out of {len(releases)} total")
             all_releases.extend(org_releases)
             
@@ -533,7 +538,6 @@ def fetch_and_process_data():
             
             
             elif notice_type in ["UK5", "UK6", "UK7"]:
-                # First try to get documents from contracts, if not found try awards
                 # Extract notice fields
                 notice_fields = {
                     "OCID": release.get("ocid", "N/A"),
