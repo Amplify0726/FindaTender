@@ -108,7 +108,7 @@ def update_last_fetch_status(status):
     try:
         sh = gc.open(SPREADSHEET_NAME)
         metadata_sheet = sh.worksheet("Metadata")
-        metadata_sheet.update('C2', [[status]])
+        metadata_sheet.update('B3', [[status]])
         logger.info(f"Updated last fetch status to {status}")
     except Exception as e:
         logger.error(f"Error updating last fetch status: {str(e)}")
