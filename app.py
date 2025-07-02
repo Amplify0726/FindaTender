@@ -103,6 +103,16 @@ def update_last_fetch_date(fetch_time):
         logger.error(f"Error updating last fetch date: {str(e)}")
         raise  # Re-raise the exception to be caught by the main error handler
 
+def update_last_fetch_status(status):
+    """Update the last fetch status in the metadata sheet (cell B2)"""
+    try:
+        sh = gc.open(SPREADSHEET_NAME)
+        metadata_sheet = sh.worksheet("Metadata")
+        metadata_sheet.update('C2', [[status]])
+        logger.info(f"Updated last fetch status to {status}")
+    except Exception as e:
+        logger.error(f"Error updating last fetch status: {str(e)}")
+
 def fetch_releases():
     """Fetch all releases since last fetch date"""
     all_releases = []
@@ -303,7 +313,7 @@ def fetch_and_process_data():
 
         # Get or create metadata sheet first
         logger.info("Getting/creating metadata sheet...")
-        metadata_sheet = get_or_create_worksheet(sh, "Metadata", rows=2, cols=2)
+        metadata_sheet = get_or_create_worksheet(sh, "Metadata", rows=3, cols=2)
         if metadata_sheet.acell('A1').value != 'last_fetch_date':
             metadata_sheet.update('A1:B1', [['last_fetch_date', '2025-02-24T00:00:00']])
 
@@ -323,6 +333,7 @@ def fetch_and_process_data():
 
         if fetch_error:
             logger.error("Fetch did not complete successfully. Sheets will NOT be updated and fetch date will NOT be advanced.")
+            update_last_fetch_status("Fetch failed")
             return False, "Fetch failed partway; no updates made."
 
         # Initialize results lists
@@ -821,7 +832,8 @@ def fetch_and_process_data():
         current_time = datetime.now(ZoneInfo("Europe/London")).strftime("%Y-%m-%dT%H:%M:%S")
         update_last_fetch_date(to_date)
         logger.info(f"Updated last fetch date to {to_date}")
-
+        update_last_fetch_status("success")
+        logger.info(f"Updated last fetch status to success")
         last_run_time = time.strftime("%Y-%m-%d %H:%M:%S")
         logger.info(f"Data successfully written to Google Sheets at {last_run_time}")
         return True, f"Data successfully processed at {last_run_time}"
