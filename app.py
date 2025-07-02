@@ -662,7 +662,7 @@ def fetch_and_process_data():
                     "PPON": release.get("buyer", {}).get("id", "N/A"),
                     "Contact Name": release.get("parties", [{}])[0].get("contactPoint", {}).get("name", "N/A"),
                     "Contact Email": release.get("parties", [{}])[0].get("contactPoint", {}).get("email", "N/A"),
-                    "Days to Award": (pd.to_datetime(release.get("contracts", [{}])[0].get("dateSigned", ""), errors='coerce', utc=True) - pd.to_datetime(release.get("date", ""), errors='coerce', utc=True)).days if release.get("contracts", [{}])[0].get("dateSigned") and release.get("date") else "",
+                    "Days to Award": (pd.to_datetime(release.get("date", ""), errors='coerce', utc=True)).days - pd.to_datetime(release.get("contracts", [{}])[0].get("dateSigned", ""), errors='coerce', utc=True) if release.get("contracts", [{}])[0].get("dateSigned") and release.get("date") else "",
                     }
                 award_notice_results.append(notice_fields)
 
@@ -833,7 +833,6 @@ def fetch_and_process_data():
         update_last_fetch_date(to_date)
         logger.info(f"Updated last fetch date to {to_date}")
         update_last_fetch_status("success")
-        logger.info(f"Updated last fetch status to success")
         last_run_time = time.strftime("%Y-%m-%d %H:%M:%S")
         logger.info(f"Data successfully written to Google Sheets at {last_run_time}")
         return True, f"Data successfully processed at {last_run_time}"
