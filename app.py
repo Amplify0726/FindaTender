@@ -607,6 +607,9 @@ def fetch_and_process_data():
                         if notice_type == "UK7"
                         else release.get("awards", [{}])[0].get("contractPeriod", {}).get("endDate", "N/A")
                     ),
+                    "Contract Signature Date": (
+                        release.get("contracts", [{}])[0].get("dateSigned", "N/A")
+                    ),
                     "Suppliers": (
                         ", ".join([supplier.get("name", "N/A") for supplier in release.get("awards", [{}])[0].get("suppliers", [])])
                     ),
