@@ -120,6 +120,7 @@ def fetch_releases():
         'updatedTo': to_date,
         'limit': 100
     }
+    error_occurred = False # Track fetch errors
     
     while True:
         page_count += 1
@@ -183,13 +184,15 @@ def fetch_releases():
 
         except requests.Timeout:
             logger.error(f"Request timed out on page {page_count}")
+            error_occurred = True
             break
         except requests.RequestException as e:
             logger.error(f"Request failed on page {page_count}: {str(e)}")
+            error_occurred = True 
             break
     
     logger.info(f"Completed fetch: Found {len(all_releases)} total releases for your organization")
-    return all_releases
+    return all_releases, error_occurred
 
 def get_or_create_worksheet(spreadsheet, name, rows=1000, cols=100):
     """Helper function to get or create a worksheet"""
@@ -315,8 +318,12 @@ def fetch_and_process_data():
         
 
         # Get releases from API
-        releases = fetch_releases()
+        releases, fetch_error = fetch_releases()
         logger.info(f"Found {len(releases)} releases to process")
+
+        if fetch_error:
+            logger.error("Fetch did not complete successfully. Sheets will NOT be updated and fetch date will NOT be advanced.")
+            return False, "Fetch failed partway; no updates made."
 
         # Initialize results lists
         planning_results = []  # UK1-3
@@ -644,6 +651,7 @@ def fetch_and_process_data():
                     "PPON": release.get("buyer", {}).get("id", "N/A"),
                     "Contact Name": release.get("parties", [{}])[0].get("contactPoint", {}).get("name", "N/A"),
                     "Contact Email": release.get("parties", [{}])[0].get("contactPoint", {}).get("email", "N/A"),
+                    "Days to Award": (pd.to_datetime(release.get("contracts", [{}])[0].get("dateSigned", ""), errors='coerce', utc=True) - pd.to_datetime(release.get("date", ""), errors='coerce', utc=True)).days if release.get("contracts", [{}])[0].get("dateSigned") and release.get("date") else "",
                     }
                 award_notice_results.append(notice_fields)
 
