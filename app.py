@@ -662,7 +662,10 @@ def fetch_and_process_data():
                     "PPON": release.get("buyer", {}).get("id", "N/A"),
                     "Contact Name": release.get("parties", [{}])[0].get("contactPoint", {}).get("name", "N/A"),
                     "Contact Email": release.get("parties", [{}])[0].get("contactPoint", {}).get("email", "N/A"),
-                    "Days to Award": (pd.to_datetime(release.get("date", ""), errors='coerce', utc=True)).days - pd.to_datetime(release.get("contracts", [{}])[0].get("dateSigned", ""), errors='coerce', utc=True) if release.get("contracts", [{}])[0].get("dateSigned") and release.get("date") else "",
+                    "Days to Award": (int((pd.to_datetime(release.get("date", ""), errors='coerce', utc=True)
+                    - pd.to_datetime(release.get("contracts", [{}])[0].get("dateSigned", ""), errors='coerce', utc=True)).total_seconds() // 86400) 
+                    if release.get("contracts", [{}])[0].get("dateSigned") and release.get("date")
+                    else ""),
                     }
                 award_notice_results.append(notice_fields)
 
