@@ -119,6 +119,8 @@ def fetch_releases():
     page_count = 0
     base_url = "https://www.find-tender.service.gov.uk/api/1.0/ocdsReleasePackages"
     global to_date
+    max_retries = 5
+    base_delay = 0.25 #250ms between requests ~4 req/s
     
     from_date = get_last_fetch_date()
     to_date = get_to_date()
@@ -134,75 +136,110 @@ def fetch_releases():
     
     while True:
         page_count += 1
-        logger.info(f"Fetching page {page_count} (total records so far: {len(all_releases)})")
+        page_count += 1
         
-        try:
-            # Add timeout to prevent hanging
-            response = requests.get(base_url, params=params, timeout=30)
-            response.raise_for_status()  # Raises an error for bad status codes
-
-            # Pre-process the response to fix invalid number formatting
-            fixed_json = re.sub(r'"(amount|amountGross|value)": 0+([1-9]\d*)', r'"\1": \2', response.text)
-            # Handle case of all zeros
-            fixed_json = re.sub(r'"(amount|amountGross|value)": 0+\b', r'"\1": 0', fixed_json)
-            
+        # Retry loop with exponential backoff
+        for attempt in range(max_retries):
             try:
-                data = json.loads(fixed_json)
-            except json.JSONDecodeError as e:
-                logger.error(f"JSON decode error on page {page_count}")
-                logger.error(f"Error details: {str(e)}")
-                logger.error(f"Response text snippet: {response.text[:1000]}...")  # First 1000 chars
-                logger.error(f"Response content type: {response.headers.get('content-type', 'unknown')}")
-                start = max(0, e.pos - 100)
-                end = min(len(response.text), e.pos + 100)
-                logger.error(response.text[start:end])
-                break
-
-            releases = data.get('releases', [])
-            if not releases:
-                logger.info("No more releases found")
-                break
+                # Add delay before request (except first page, first attempt)
+                if page_count > 1 or attempt > 0:
+                    wait_time = base_delay * (2 ** attempt)
+                    logger.info(f"Waiting {wait_time:.2f}s before request...")
+                    time.sleep(wait_time)
                 
-            # Filter for your organization
-            org_releases = [
-            r for r in releases 
-            if (r.get("buyer", {}).get("id") == MY_ORG_ID or 
-                (r.get("buyer", {}).get("id") is None and 
-                any(p.get("id") == MY_ORG_ID for p in r.get("parties", []))))
-            ]
-            logger.info(f"Page {page_count}: Found {len(org_releases)} releases for your organization out of {len(releases)} total")
-            all_releases.extend(org_releases)
+                logger.info(f"Fetching page {page_count} (attempt {attempt + 1}/{max_retries}, total records: {len(all_releases)})")
+                
+                response = requests.get(base_url, params=params, timeout=30)
+                
+                # Check for 429 specifically before raising for status
+                if response.status_code == 429:
+                    retry_after = int(response.headers.get('Retry-After', 60))
+                    logger.warning(f"Rate limited on page {page_count}. Waiting {retry_after}s...")
+                    time.sleep(retry_after)
+                    continue  # Retry this request
+                
+                response.raise_for_status()
+
+                # Pre-process the response to fix invalid number formatting
+                fixed_json = re.sub(r'"(amount|amountGross|value)": 0+([1-9]\d*)', r'"\1": \2', response.text)
+                fixed_json = re.sub(r'"(amount|amountGross|value)": 0+\b', r'"\1": 0', fixed_json)
+                
+                try:
+                    data = json.loads(fixed_json)
+                except json.JSONDecodeError as e:
+                    logger.error(f"JSON decode error on page {page_count}")
+                    logger.error(f"Error details: {str(e)}")
+                    logger.error(f"Response text snippet: {response.text[:1000]}...")
+                    logger.error(f"Response content type: {response.headers.get('content-type', 'unknown')}")
+                    start = max(0, e.pos - 100)
+                    end = min(len(response.text), e.pos + 100)
+                    logger.error(response.text[start:end])
+                    break
+
+                releases = data.get('releases', [])
+                if not releases:
+                    logger.info("No more releases found")
+                    return all_releases, error_occurred
+                    
+                # Filter for your organization
+                org_releases = [
+                r for r in releases 
+                if (r.get("buyer", {}).get("id") == MY_ORG_ID or 
+                    (r.get("buyer", {}).get("id") is None and 
+                    any(p.get("id") == MY_ORG_ID for p in r.get("parties", []))))
+                ]
+                logger.info(f"Page {page_count}: Found {len(org_releases)} releases for your organization out of {len(releases)} total")
+                all_releases.extend(org_releases)
             
         
             # Check for next page
-            next_url = data.get('links', {}).get('next')
-            if not next_url:
-                logger.info("No more pages available")
-                break
-            
-            # Extract cursor from next_url for pagination
-            parsed = urlparse(next_url)
-            cursor = parse_qs(parsed.query).get('cursor', [None])[0]
-            if not cursor:
-                logger.info("No cursor found in next URL")
-                break
-            
-            params['cursor'] = cursor
+                next_url = data.get('links', {}).get('next')
+                if not next_url:
+                    logger.info("No more pages available")
+                    return all_releases, error_occurred
+                
+                # Extract cursor from next_url for pagination
+                parsed = urlparse(next_url)
+                cursor = parse_qs(parsed.query).get('cursor', [None])[0]
+                if not cursor:
+                    logger.info("No cursor found in next URL")
+                    return all_releases, error_occurred
+                
+                params['cursor'] = cursor
+                break  # Success - exit retry loop and continue to next page
 
-            # Add a small delay between requests to be nice to the API
-            time.sleep(1)
-
-        except requests.Timeout:
-            logger.error(f"Request timed out on page {page_count}")
-            error_occurred = True
-            break
-        except requests.RequestException as e:
-            logger.error(f"Request failed on page {page_count}: {str(e)}")
-            error_occurred = True 
-            break
+            except requests.Timeout:
+                logger.error(f"Request timed out on page {page_count}, attempt {attempt + 1}")
+                if attempt < max_retries - 1:
+                    continue  # Retry
+                else:
+                    error_occurred = True
+                    return all_releases, error_occurred
+                    
+            except requests.HTTPError as e:
+                if e.response.status_code == 429:
+                    if attempt < max_retries - 1:
+                        wait_time = base_delay * (2 ** (attempt + 1))
+                        logger.warning(f"Rate limit hit, waiting {wait_time:.2f}s before retry {attempt + 2}")
+                        continue
+                    else:
+                        logger.error(f"Max retries reached on page {page_count}")
+                        error_occurred = True
+                        return all_releases, error_occurred
+                else:
+                    logger.error(f"HTTP error on page {page_count}: {e}")
+                    error_occurred = True
+                    return all_releases, error_occurred
+                    
+            except requests.RequestException as e:
+                logger.error(f"Request failed on page {page_count}, attempt {attempt + 1}: {str(e)}")
+                if attempt < max_retries - 1:
+                    continue  # Retry
+                else:
+                    error_occurred = True
+                    return all_releases, error_occurred
     
-    logger.info(f"Completed fetch: Found {len(all_releases)} total releases for your organization")
-    return all_releases, error_occurred
+ 
 
 def get_or_create_worksheet(spreadsheet, name, rows=1000, cols=100):
     """Helper function to get or create a worksheet"""
