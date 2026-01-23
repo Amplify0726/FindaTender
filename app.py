@@ -749,7 +749,11 @@ def fetch_and_process_data():
                             "Notice ID": release.get("id", "N/A"),
                             "Published Date": release.get("date", "N/A"),
                             "Is Update": is_update,
-                            "Contract Title": award.get("title", "N/A"),
+                            "Contract Title": (
+                                release.get("tender", {}).get("title", "N/A")
+                                if notice_type == "UK7"
+                                else award.get("title", "N/A)
+                            ),
                             # For UK7, try to get value from contract first, then fall back to award
                             "Value ex VAT": (
                                 release.get("contracts", [{}])[0].get("value", {}).get("amount", "N/A") 
