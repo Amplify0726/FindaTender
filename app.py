@@ -136,7 +136,6 @@ def fetch_releases():
     
     while True:
         page_count += 1
-        page_count += 1
         
         # Retry loop with exponential backoff
         for attempt in range(max_retries):
@@ -149,7 +148,7 @@ def fetch_releases():
                 
                 logger.info(f"Fetching page {page_count} (attempt {attempt + 1}/{max_retries}, total records: {len(all_releases)})")
                 
-                response = requests.get(base_url, params=params, timeout=30)
+                response = requests.get(base_url, params=params, timeout=30, 30)
                 
                 # Check for 429 specifically before raising for status
                 if response.status_code == 429:
@@ -174,7 +173,8 @@ def fetch_releases():
                     start = max(0, e.pos - 100)
                     end = min(len(response.text), e.pos + 100)
                     logger.error(response.text[start:end])
-                    break
+                    error_occured = True
+                    return all_releases, error_occurred
 
                 releases = data.get('releases', [])
                 if not releases:
