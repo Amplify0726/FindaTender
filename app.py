@@ -148,7 +148,7 @@ def fetch_releases():
                 
                 logger.info(f"Fetching page {page_count} (attempt {attempt + 1}/{max_retries}, total records: {len(all_releases)})")
                 
-                response = requests.get(base_url, params=params, timeout=30, 30)
+                response = requests.get(base_url, params=params, timeout=(30, 30))
                 
                 # Check for 429 specifically before raising for status
                 if response.status_code == 429:
